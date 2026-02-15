@@ -18,9 +18,10 @@ export default defineConfig([
     dts: true,
     external: ['next', 'ai', '@ai-sdk/anthropic', 'zod'],
   },
-  {
-    entry: { 'cli/init': 'src/cli/init.ts' },
-    format: ['esm'],
-    banner: { js: '#!/usr/bin/env node' },
-  },
+  // CLI build entry — uncomment when src/cli/init.ts is implemented
+  // {
+  //   entry: { 'cli/init': 'src/cli/init.ts' },
+  //   format: ['esm'],
+  //   banner: { js: '#!/usr/bin/env node' },
+  // },
 ])

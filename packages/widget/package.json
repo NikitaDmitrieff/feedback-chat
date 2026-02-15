@@ -18,7 +18,7 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && cp src/client/styles.css dist/styles.css",
     "dev": "tsup --watch",
     "test": "vitest run",
     "lint": "tsc --noEmit"
@@ -40,11 +40,8 @@
     "clsx": "^2.1",
     "tailwind-merge": "^2.6",
     "class-variance-authority": "^0.7",
-    "@radix-ui/react-tooltip": "^1.1",
-    "@radix-ui/react-dialog": "^1.1",
-    "@radix-ui/react-collapsible": "^1.1",
-    "@radix-ui/react-avatar": "^1.1",
-    "@radix-ui/react-slot": "^1.1"
+    "radix-ui": "^1",
+    "remark-gfm": "^4"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -8,6 +8,7 @@
     "test": "turbo test",
     "lint": "turbo lint"
   },
+  "packageManager": "npm@10.9.4",
   "devDependencies": {
     "turbo": "^2",
     "typescript": "^5.7"
