@@ -1,0 +1,298 @@
+.feedback-panel {
+  /* ── Always-dark glassmorphism tokens ── */
+  --background: #1a1c20;
+  --foreground: #e8eaed;
+  --card: rgba(255, 255, 255, 0.10);
+  --card-foreground: #e8eaed;
+  --popover: #282a2e;
+  --popover-foreground: #e8eaed;
+  --primary: #ffffff;
+  --primary-foreground: #1a1c20;
+  --secondary: rgba(255, 255, 255, 0.10);
+  --secondary-foreground: #e8eaed;
+  --muted: rgba(255, 255, 255, 0.08);
+  --muted-foreground: #8b8d93;
+  --accent: rgba(255, 255, 255, 0.10);
+  --accent-foreground: #e8eaed;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.10);
+  --ring: rgba(94, 158, 255, 0.3);
+
+  --color-background: #1a1c20;
+  --color-foreground: #e8eaed;
+  --color-surface: rgba(255, 255, 255, 0.10);
+  --color-border: rgba(255, 255, 255, 0.10);
+  --color-muted: rgba(255, 255, 255, 0.08);
+  --color-muted-foreground: #8b8d93;
+  --color-muted-light: rgba(255, 255, 255, 0.10);
+  --color-error: #ef4444;
+  --color-success: #22c55e;
+  --color-primary: #ffffff;
+  --color-primary-foreground: #1a1c20;
+  --color-primary-light: #ffffff;
+  --color-primary-muted: rgba(255, 255, 255, 0.10);
+  --color-ring: rgba(94, 158, 255, 0.3);
+  --color-input: rgba(255, 255, 255, 0.12);
+  --color-card: rgba(255, 255, 255, 0.10);
+  --color-card-foreground: #e8eaed;
+  --color-popover: #282a2e;
+  --color-popover-foreground: #e8eaed;
+  --color-secondary: rgba(255, 255, 255, 0.10);
+  --color-secondary-foreground: #e8eaed;
+  --color-accent: rgba(255, 255, 255, 0.10);
+  --color-accent-foreground: #e8eaed;
+  --color-destructive: #ef4444;
+
+  color-scheme: dark;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.011em;
+  color: var(--color-foreground);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Form elements inherit panel colors + font */
+.feedback-panel input,
+.feedback-panel textarea,
+.feedback-panel [contenteditable] {
+  color: inherit;
+  font-family: inherit;
+}
+
+/* Code blocks */
+.feedback-panel .aui-md-inline-code { font-family: 'JetBrains Mono', monospace; }
+.feedback-panel .aui-md-pre { font-family: 'JetBrains Mono', monospace; }
+
+/* ── Trigger — centered fake composer bar ── */
+.feedback-trigger-bar {
+  padding: 0 1.5rem;
+  max-width: 18rem;       /* compact resting state */
+  transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.feedback-trigger-bar:focus-within {
+  max-width: 30rem;       /* expand on focus */
+}
+.feedback-trigger-input {
+  background: rgba(24, 26, 30, 0.88);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  font-family: 'Inter', system-ui, sans-serif;
+  cursor: text;
+}
+.feedback-trigger-input:hover {
+  background: rgba(30, 32, 37, 0.92);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.feedback-trigger-button {
+  background: rgba(24, 26, 30, 0.88);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8b8d93;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: all 0.3s ease;
+}
+.feedback-trigger-button:hover {
+  background: rgba(30, 32, 37, 0.92);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #e8eaed;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ── Primary button overrides ── */
+.feedback-panel .bg-primary {
+  background: #ffffff !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.feedback-panel .bg-primary:hover {
+  background: #e0e0e0 !important;
+  transform: none !important;
+}
+.feedback-panel .text-primary { color: #ffffff !important; }
+.feedback-panel .border-primary { border-color: rgba(255, 255, 255, 0.15) !important; }
+
+/* ═══════════════════════════════════════════
+   Glass panel shell
+   ═══════════════════════════════════════════ */
+
+.feedback-panel-glass {
+  background: rgba(24, 26, 30, 1);
+  backdrop-filter: blur(40px) saturate(1.3);
+  -webkit-backdrop-filter: blur(40px) saturate(1.3);
+  border: 1.5px solid rgba(255, 255, 255, 0.10);
+  border-radius: 1.5rem;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.feedback-panel-glass:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+}
+
+/* ── Conversation tabs — floating glass pills ── */
+.feedback-tab {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.feedback-tab-active {
+  background: rgba(24, 26, 30, 1);
+  color: #e8eaed;
+  border-color: rgba(255, 255, 255, 0.10);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.feedback-tab-inactive {
+  background: rgba(24, 26, 30, 0.80);
+  color: #8b8d93;
+}
+.feedback-tab-inactive:hover {
+  background: rgba(24, 26, 30, 0.90);
+  color: #c0c2c6;
+}
+.feedback-tab-button {
+  background: rgba(24, 26, 30, 0.80);
+  color: #8b8d93;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.feedback-tab-button:hover {
+  background: rgba(24, 26, 30, 0.95);
+  color: #e8eaed;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Composer — subtle prompt box ── */
+.feedback-panel .aui-composer-attachment-dropzone {
+  background: rgba(255, 255, 255, 0.10) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 1.25rem !important;
+  box-shadow: none;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.feedback-panel .aui-composer-attachment-dropzone:focus-within {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: none;
+}
+
+/* ── Viewport top fade ── */
+.feedback-panel .aui-thread-viewport::before {
+  content: '';
+  position: sticky;
+  top: 0;
+  display: block;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  margin-bottom: -2.5rem;
+  background: linear-gradient(to bottom, rgba(24, 26, 30, 1) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 5;
+  flex-shrink: 0;
+}
+
+/* ── Viewport footer (sticky composer area) ── */
+.feedback-panel .aui-thread-viewport-footer {
+  background: rgba(24, 26, 30, 1) !important;
+  border-radius: 0 !important;
+}
+
+/* ── User message bubbles ── */
+.feedback-panel .aui-user-message-content {
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Edit composer ── */
+.feedback-panel .aui-edit-composer-root {
+  border-radius: 1.5rem !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* ── Error messages ── */
+.feedback-panel .aui-message-error-root {
+  border-radius: 0.75rem;
+}
+
+/* ── Action bar popover ── */
+.feedback-panel .aui-action-bar-more-content {
+  background: rgba(40, 42, 46, 0.95) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  border-radius: 0.75rem !important;
+}
+
+/* ── Suggestion cards ── */
+.feedback-panel .aui-thread-welcome-suggestion {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.feedback-panel .aui-thread-welcome-suggestion:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Scroll to bottom button ── */
+.feedback-panel .aui-thread-scroll-to-bottom {
+  background: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Pipeline tracker card ── */
+.feedback-panel .rounded-2xl.border.bg-card {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Submit result containers ── */
+.feedback-panel .rounded-xl.border.border-border {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.feedback-panel .rounded-xl.bg-muted\/50 {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-radius: 0.75rem;
+}
+
+/* ── Scrollbar — hidden + scroll isolation ── */
+.feedback-panel * {
+  scrollbar-width: none;
+}
+.feedback-panel ::-webkit-scrollbar {
+  display: none;
+}
+.feedback-panel {
+  overscroll-behavior: contain;
+}
