@@ -1,8 +1,10 @@
 {
+  "$schema": "https://context7.com/schema/context7.json",
   "projectTitle": "@nikitadmitrieff/feedback-chat",
-  "description": "AI-powered feedback chatbot widget for Next.js — turns user ideas into PRs via Claude Code agent",
+  "description": "AI-powered feedback chatbot widget for Next.js — chat-only, GitHub issue creation, or full autonomous code pipeline (chat → issue → Claude agent → PR → preview → approve)",
   "branch": "main",
   "folders": [
+    "docs",
     "packages/widget/src",
     "packages/agent/src"
   ],
@@ -16,5 +18,17 @@
     "LICENSE",
     "package-lock.json"
   ],
-  "rules": "This is a Next.js feedback chatbot widget. Key exports: FeedbackPanel (client component), createFeedbackHandler and createStatusHandler (server route factories). Uses AI SDK v6, Assistant UI, and Tailwind v4. Consumer must add @source directive for Tailwind scanning."
+  "rules": [
+    "feedback-chat has 3 tiers: (1) Chat only — AI conversations with localStorage persistence, needs ANTHROPIC_API_KEY + FEEDBACK_PASSWORD. (2) + GitHub — adds automatic issue creation, needs + GITHUB_TOKEN + GITHUB_REPO. (3) + Pipeline — adds autonomous Claude Code agent that implements feedback as PRs, needs + AGENT_URL + Railway/Docker deployment. Always ask which tier the user needs.",
+    "The Tailwind v4 @source directive is MANDATORY. Add `@source \"../node_modules/@nikitadmitrieff/feedback-chat/dist/**/*.js\";` to globals.css after `@import \"tailwindcss\"`. Without this, the widget renders completely unstyled.",
+    "FeedbackPanel MUST be in a 'use client' component. It uses useState, useEffect, and sessionStorage.",
+    "Import styles.css alongside the component: `import '@nikitadmitrieff/feedback-chat/styles.css'`. Without it, no glassmorphism theme.",
+    "AI SDK v6 conventions: use inputSchema (not parameters), stepCountIs() (not maxSteps), toUIMessageStreamResponse() (not toDataStreamResponse()).",
+    "react@19.1.0 and 19.1.1 are excluded by @ai-sdk/react — consumer needs react@>=19.1.2.",
+    "Three package exports: '@nikitadmitrieff/feedback-chat' (client components), '@nikitadmitrieff/feedback-chat/server' (createFeedbackHandler, createStatusHandler), '@nikitadmitrieff/feedback-chat/styles.css' (styles).",
+    "The widget CSS is scoped under .feedback-panel — do not override it with consumer styles.",
+    "For pipeline tier: consumer needs AGENT_URL env var pointing to the deployed agent service. Agent needs GITHUB_TOKEN, GITHUB_REPO, WEBHOOK_SECRET, and either CLAUDE_CREDENTIALS_JSON (Max, $0/run) or ANTHROPIC_API_KEY.",
+    "GitHub conventions are fixed: branch naming is feedback/issue-{N}, labels are feedback-bot/auto-implement/in-progress/agent-failed/preview-pending/rejected. Do not change these.",
+    "localStorage keys are fixed: feedback_conversations, feedback_conv_{id}, feedback_active_conv. sessionStorage: feedback_password."
+  ]
 }
