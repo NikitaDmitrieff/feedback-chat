@@ -1,0 +1,22 @@
+{
+  "name": "@feedback-chat/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.19",
+    "typescript": "^5.7",
+    "vitest": "^3"
+  }
+}
