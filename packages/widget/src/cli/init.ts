@@ -3,7 +3,7 @@ import { existsSync, writeFileSync, appendFileSync, readFileSync, mkdirSync } fr
 import { join, resolve } from 'node:path'
 
 const CHAT_ROUTE_TEMPLATE = (hasGithub: boolean) => `\
-import { createFeedbackHandler } from '@feedback-chat/widget/server'
+import { createFeedbackHandler } from '@nikitadmitrieff/feedback-chat/server'
 
 const handler = createFeedbackHandler({
   password: process.env.FEEDBACK_PASSWORD!,${hasGithub ? `
@@ -17,7 +17,7 @@ export const POST = handler.POST
 `
 
 const STATUS_ROUTE_TEMPLATE = `\
-import { createStatusHandler } from '@feedback-chat/widget/server'
+import { createStatusHandler } from '@nikitadmitrieff/feedback-chat/server'
 
 const handler = createStatusHandler({
   password: process.env.FEEDBACK_PASSWORD!,
@@ -173,8 +173,8 @@ async function main() {
   console.log()
   console.log('  ── Add to your layout ──────────────────────')
   console.log()
-  console.log("    import { FeedbackPanel } from '@feedback-chat/widget'")
-  console.log("    import '@feedback-chat/widget/styles.css'")
+  console.log("    import { FeedbackPanel } from '@nikitadmitrieff/feedback-chat'")
+  console.log("    import '@nikitadmitrieff/feedback-chat/styles.css'")
   console.log()
   console.log('    // In your component:')
   console.log('    const [open, setOpen] = useState(false)')

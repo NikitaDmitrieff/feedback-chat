@@ -38,7 +38,7 @@ User submits idea → AI chat refines it → GitHub issue → Claude Code agent 
 ### 1. Install
 
 ```bash
-npm install @feedback-chat/widget
+npm install @nikitadmitrieff/feedback-chat
 ```
 
 ### 2. Run the setup wizard
@@ -52,8 +52,8 @@ This creates your API routes and configures `.env.local`.
 ### 3. Add to your layout
 
 ```tsx
-import { FeedbackPanel } from '@feedback-chat/widget'
-import '@feedback-chat/widget/styles.css'
+import { FeedbackPanel } from '@nikitadmitrieff/feedback-chat'
+import '@nikitadmitrieff/feedback-chat/styles.css'
 
 export default function Layout({ children }) {
   const [open, setOpen] = useState(false)
@@ -218,7 +218,7 @@ npm run test     # Run tests
 ```
 feedback-chat/
 ├── packages/
-│   ├── widget/    ← npm package (@feedback-chat/widget)
+│   ├── widget/    ← npm package (@nikitadmitrieff/feedback-chat)
 │   │   └── src/
 │   │       ├── client/   ← React components + hooks
 │   │       ├── server/   ← Route handler factories

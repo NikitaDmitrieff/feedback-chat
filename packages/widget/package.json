@@ -1,5 +1,5 @@
 {
-  "name": "@feedback-chat/widget",
+  "name": "@nikitadmitrieff/feedback-chat",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/client/index.js",
