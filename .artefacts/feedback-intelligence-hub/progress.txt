@@ -1,0 +1,13 @@
+# Feedback Intelligence Hub — Progress Tracker
+
+## Completed Tasks
+
+### Task 1: Supabase Migration — New Tables ✅
+- Created `packages/dashboard/supabase/migrations/00004_feedback_tables.sql`
+- Three tables: feedback_sessions, feedback_messages, feedback_themes
+- Indexes on project_id, session_id, tester_id
+- RLS policies matching existing pattern (project ownership)
+- Tables in public schema (consistent with existing dashboard tables)
+
+## Next Task
+Task 2: Dashboard Types
