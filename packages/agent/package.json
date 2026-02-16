@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "start:managed": "node dist/managed-worker.js",
     "dev": "tsx watch src/server.ts",
+    "credentials": "tsx src/credentials.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
