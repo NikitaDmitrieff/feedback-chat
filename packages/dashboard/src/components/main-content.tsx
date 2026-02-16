@@ -6,7 +6,7 @@ export function MainContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const hasSidebar = pathname !== '/login' && !pathname.startsWith('/auth/')
   return (
-    <main className={hasSidebar ? 'pl-[60px] transition-[padding] duration-200' : ''}>
+    <main className={hasSidebar ? 'pl-16' : ''}>
       {children}
     </main>
   )
