@@ -25,6 +25,90 @@ export type FeedbackHandlerConfig = {
     repo: string
     labels?: string[]
   }
+  /** Optional Supabase config for fire-and-forget conversation persistence */
+  supabase?: {
+    url: string
+    serviceRoleKey: string
+    projectId: string
+  }
+}
+
+function extractTextContent(message: UIMessage): string {
+  if (message.parts) {
+    return message.parts
+      .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+      .map((p) => p.text)
+      .join('\n')
+  }
+  return ''
+}
+
+async function persistFeedback(
+  supabaseConfig: NonNullable<FeedbackHandlerConfig['supabase']>,
+  messages: UIMessage[]
+) {
+  const { createClient } = await import('@supabase/supabase-js')
+  const supabase = createClient(
+    supabaseConfig.url,
+    supabaseConfig.serviceRoleKey,
+    { db: { schema: 'feedback_chat' } }
+  )
+
+  const testerName = 'Anonymous'
+  const testerId = 'anonymous'
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+
+  // Find existing session for same project + tester within last hour
+  const { data: existing } = await supabase
+    .from('feedback_sessions')
+    .select('id, message_count')
+    .eq('project_id', supabaseConfig.projectId)
+    .eq('tester_id', testerId)
+    .gte('last_message_at', oneHourAgo)
+    .order('last_message_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  let sessionId: string
+  let existingCount: number
+
+  if (existing) {
+    sessionId = existing.id
+    existingCount = existing.message_count
+  } else {
+    const { data: newSession, error } = await supabase
+      .from('feedback_sessions')
+      .insert({
+        project_id: supabaseConfig.projectId,
+        tester_id: testerId,
+        tester_name: testerName,
+      })
+      .select('id')
+      .single()
+    if (error || !newSession) return
+    sessionId = newSession.id
+    existingCount = 0
+  }
+
+  // Only insert messages not yet persisted (based on count comparison)
+  const newMessages = messages.slice(existingCount)
+  if (newMessages.length > 0) {
+    const rows = newMessages.map((m) => ({
+      session_id: sessionId,
+      role: m.role,
+      content: extractTextContent(m),
+    }))
+    await supabase.from('feedback_messages').insert(rows)
+  }
+
+  // Update session metadata
+  await supabase
+    .from('feedback_sessions')
+    .update({
+      last_message_at: new Date().toISOString(),
+      message_count: messages.length,
+    })
+    .eq('id', sessionId)
 }
 
 /**
@@ -98,6 +182,10 @@ export function createFeedbackHandler(config: FeedbackHandlerConfig) {
       stopWhen: stepCountIs(2),
       tools,
     })
+
+    if (config.supabase) {
+      persistFeedback(config.supabase, messages).catch(() => {})
+    }
 
     return result.toUIMessageStreamResponse()
   }
