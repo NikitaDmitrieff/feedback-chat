@@ -10,6 +10,7 @@ import { useConversations } from './use-conversations'
 import { ConversationTabs } from './conversation-tabs'
 import { PresentOptionsToolUI } from './present-options-tool-ui'
 import { SubmitRequestToolUI } from './submit-request-tool-ui'
+import { TooltipProvider } from './ui/tooltip'
 import type { FeedbackPanelProps } from './types'
 
 const STORAGE_KEY = 'feedback_password'
@@ -64,7 +65,7 @@ export function FeedbackPanel({ isOpen, onToggle, apiUrl = '/api/feedback/chat' 
   }, [])
 
   return (
-    <>
+    <TooltipProvider>
       {/* Centered composer bar — real input, opens panel on Enter */}
       <div
         className={`feedback-trigger-bar fixed bottom-6 left-1/2 z-50 w-full -translate-x-1/2 transition-all duration-300 ${
@@ -135,7 +136,7 @@ export function FeedbackPanel({ isOpen, onToggle, apiUrl = '/api/feedback/chat' 
           )}
         </div>
       </div>
-    </>
+    </TooltipProvider>
   )
 }
 

@@ -8,6 +8,11 @@ export type Stage =
   | 'failed'
   | 'rejected'
 
+export type ActivityEntry = {
+  message: string
+  time: string
+}
+
 export type StatusResponse = {
   stage: Stage
   issueNumber: number
@@ -16,6 +21,7 @@ export type StatusResponse = {
   previewUrl?: string
   prNumber?: number
   prUrl?: string
+  activity?: ActivityEntry[]
 }
 
 export type Conversation = {

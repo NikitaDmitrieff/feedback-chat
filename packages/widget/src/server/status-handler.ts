@@ -20,6 +20,11 @@ export type Stage =
   | 'failed'
   | 'rejected'
 
+export type ActivityEntry = {
+  message: string
+  time: string
+}
+
 export type StatusResponse = {
   stage: Stage
   issueNumber: number
@@ -28,6 +33,7 @@ export type StatusResponse = {
   previewUrl?: string
   prNumber?: number
   prUrl?: string
+  activity?: ActivityEntry[]
 }
 
 type GitHubConfig = { repo: string; token: string }
@@ -108,17 +114,36 @@ async function getPreviewUrl(
   return null
 }
 
-async function getFailReason(config: GitHubConfig, issueNumber: number): Promise<string | undefined> {
+async function getActivity(
+  config: GitHubConfig,
+  issueNumber: number,
+): Promise<ActivityEntry[]> {
   const res = await fetch(
     `${issueEndpoint(config, issueNumber)}/comments?per_page=5&direction=desc`,
     { headers: githubHeaders(config.token), cache: 'no-store' },
   )
-  if (!res.ok) return undefined
+  if (!res.ok) return []
   const comments = await res.json()
-  const failComment = comments.find((c: { body?: string }) =>
-    c.body?.startsWith('Agent failed:'),
-  )
-  return failComment?.body?.replace('Agent failed:', '').trim()
+  if (!Array.isArray(comments)) return []
+
+  return comments
+    .slice(0, 3)
+    .map((c: { body?: string; created_at?: string }) => {
+      const raw = c.body ?? ''
+      const clean = raw
+        .replace(/<[^>]*>/g, '')
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`[^`]*`/g, '')
+        .replace(/[#*_~>\-|]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 120)
+      return {
+        message: clean,
+        time: c.created_at ?? new Date().toISOString(),
+      }
+    })
+    .reverse()
 }
 
 async function isAgentRunning(agentUrl: string | undefined, issueNumber: number): Promise<boolean> {
@@ -147,8 +172,19 @@ async function deriveStage(
   const issueUrl: string = issue.html_url
 
   if (labels.includes('agent-failed')) {
-    const failReason = await getFailReason(config, issueNumber)
-    return { stage: 'failed', issueUrl, failReason }
+    const activity = await getActivity(config, issueNumber)
+    const failComment = activity.find((a) => a.message.startsWith('Agent failed:'))
+    let failReason = failComment?.message.replace('Agent failed:', '').trim()
+    if (failReason) {
+      failReason = failReason
+        .replace(/<[^>]*>/g, '')
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`[^`]*`/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 80)
+    }
+    return { stage: 'failed', issueUrl, failReason, activity }
   }
 
   if (labels.includes('rejected')) {
@@ -329,7 +365,8 @@ async function handleRequestChanges(
     await fetch(`${url}/comments`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ body: `**Changes requested:**\n\n${comment}` }),
+      // Must match the string the agent's retry detection looks for
+      body: JSON.stringify({ body: `**Modifications demandées :**\n\n${comment}` }),
     })
   }
 
@@ -391,6 +428,11 @@ export function createStatusHandler(config: StatusHandlerConfig) {
     const result = await deriveStage(ghConfig, issueNumber, agentUrl)
     if (!result) {
       return Response.json({ error: 'Issue not found' }, { status: 404 })
+    }
+
+    const terminal: Stage[] = ['deployed', 'rejected']
+    if (!terminal.includes(result.stage) && !result.activity) {
+      result.activity = await getActivity(ghConfig, issueNumber)
     }
 
     const response: StatusResponse = { issueNumber, ...result }

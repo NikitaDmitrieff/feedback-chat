@@ -31,6 +31,21 @@ const STAGE_INDEX: Record<Stage, number> = {
   rejected: -1,
 }
 
+const STAGE_MESSAGE: Partial<Record<Stage, string>> = {
+  created: 'Creating issue\u2026',
+  queued: 'Waiting for agent\u2026',
+  running: 'Running\u2026',
+  validating: 'Checking build\u2026',
+  preview_ready: 'Deploying preview\u2026',
+}
+
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
 const TERMINAL_STAGES: Stage[] = ['deployed', 'failed', 'rejected']
 const POLL_INTERVAL_MS = 5000
 const PREVIEW_POLL_INTERVAL_MS = 15000
@@ -116,6 +131,8 @@ export function PipelineTracker({
   const [changeComment, setChangeComment] = useState('')
   const [confirmReject, setConfirmReject] = useState(false)
   const previousStageRef = useRef<Stage | null>(null)
+  const stageStartRef = useRef(Date.now())
+  const [elapsed, setElapsed] = useState(0)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -137,6 +154,21 @@ export function PipelineTracker({
     if (status.stage !== 'failed') {
       previousStageRef.current = status.stage
     }
+  }, [status.stage])
+
+  // Reset timer when stage changes
+  useEffect(() => {
+    stageStartRef.current = Date.now()
+    setElapsed(0)
+  }, [status.stage])
+
+  // Tick the timer every second while not terminal
+  useEffect(() => {
+    if (TERMINAL_STAGES.includes(status.stage)) return
+    const interval = setInterval(() => {
+      setElapsed(Date.now() - stageStartRef.current)
+    }, 1000)
+    return () => clearInterval(interval)
   }, [status.stage])
 
   useEffect(() => {
@@ -189,25 +221,60 @@ export function PipelineTracker({
   const currentIndex = STAGE_INDEX[status.stage]
   const isFailed = status.stage === 'failed'
   const failedAtIndex = isFailed ? getFailedStepIndex(previousStageRef.current) : -1
+  const progressIndex = isFailed ? failedAtIndex : currentIndex
+
+  const latestActivity = status.activity?.at(-1)?.message
+  const activityMessage = latestActivity || STAGE_MESSAGE[status.stage] || ''
+  const isActive = !TERMINAL_STAGES.includes(status.stage)
 
   return (
     <div className="rounded-2xl border border-border bg-card p-3 space-y-2">
-      <div className="space-y-0">
+      <div className="relative">
+        {/* Background track */}
+        <div className="absolute left-[7.5px] top-3 bottom-3 w-px bg-muted-foreground/15" />
+
+        {/* Progress line */}
+        {progressIndex > 0 && (
+          <div
+            className={`absolute left-[7.5px] top-3 w-px transition-all duration-700 ease-out ${
+              isFailed ? 'bg-destructive/50' : 'bg-emerald-500/50'
+            }`}
+            style={{ height: `${progressIndex * 24}px` }}
+          />
+        )}
+
         {STEPS.map((step, i) => {
           const state = deriveStepState(i, currentIndex, failedAtIndex, status.stage)
 
           return (
-            <div key={step.stage} className="flex items-center gap-2 h-6">
-              <StepDot state={state} />
-              <span className={`text-xs ${STEP_LABEL_CLASS[state]}`}>
-                {state === 'failed' && status.failReason
-                  ? status.failReason
-                  : step.label}
-              </span>
-              {i === 0 && (
-                <span className="ml-auto text-[11px] text-muted-foreground/60">
-                  #{issueNumber}
+            <div key={step.stage}>
+              <div className="relative flex items-center gap-2 h-6">
+                <StepDot state={state} />
+                <span className={`text-xs truncate ${STEP_LABEL_CLASS[state]}`}>
+                  {step.label}
                 </span>
+                {i === 0 && (
+                  <span className="ml-auto text-[11px] text-muted-foreground/60 shrink-0">
+                    #{issueNumber}
+                  </span>
+                )}
+              </div>
+              {state === 'failed' && status.failReason && (
+                <div className="pl-6 pb-0.5">
+                  <span className="text-[10px] text-destructive/80 line-clamp-2">
+                    {status.failReason}
+                  </span>
+                </div>
+              )}
+              {state === 'active' && isActive && activityMessage && (
+                <div className="flex items-center gap-2 pl-6 h-5">
+                  <span className="text-[10px] text-muted-foreground truncate flex-1">
+                    {activityMessage}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">
+                    {formatElapsed(elapsed)}
+                  </span>
+                </div>
               )}
             </div>
           )
