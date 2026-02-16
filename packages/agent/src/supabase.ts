@@ -6,5 +6,5 @@ export function createSupabaseClient() {
   if (!url || !key) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
   }
-  return createClient(url, key)
+  return createClient(url, key, { db: { schema: 'feedback_chat' } })
 }
