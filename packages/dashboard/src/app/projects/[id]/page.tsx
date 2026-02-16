@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Nav } from '@/components/nav'
+import { SetupChecklist } from '@/components/setup-checklist'
 import Link from 'next/link'
-import { ArrowLeft, Github, ExternalLink, Copy, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Github, ExternalLink } from 'lucide-react'
 
 type Stage = 'created' | 'queued' | 'running' | 'validating' | 'preview_ready' | 'deployed' | 'failed' | 'rejected'
 
@@ -31,17 +32,6 @@ function StageBadge({ stage }: { stage: string }) {
   )
 }
 
-function CopyBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-1">
-      <span className="text-[11px] font-medium text-muted">{label}</span>
-      <div className="code-block flex items-start gap-2">
-        <code className="min-w-0 flex-1 break-all">{value}</code>
-      </div>
-    </div>
-  )
-}
-
 export default async function ProjectPage({
   params,
   searchParams,
@@ -55,7 +45,7 @@ export default async function ProjectPage({
 
   const { data: project } = await supabase
     .from('projects')
-    .select('id, name, github_repo, webhook_secret, created_at')
+    .select('id, name, github_repo, webhook_secret, created_at, setup_progress')
     .eq('id', id)
     .single()
 
@@ -68,7 +58,10 @@ export default async function ProjectPage({
     .order('started_at', { ascending: false })
     .limit(50)
 
-  const showSetup = !!apiKey
+  const hasRuns = !!runs && runs.length > 0
+  const setupProgress = (project.setup_progress as Record<string, boolean>) ?? {}
+  const webhookUrl = `https://app.feedback.chat/api/webhook/${project.id}`
+  const agentUrl = `https://app.feedback.chat/api/agent/${project.id}`
 
   return (
     <>
@@ -92,50 +85,26 @@ export default async function ProjectPage({
           </div>
         </div>
 
-        {/* Setup banner */}
-        {showSetup && (
-          <div className="glass-card mb-8 overflow-hidden border-accent/20">
-            <div className="flex items-center gap-3 border-b border-edge px-5 py-3">
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <span className="text-sm font-medium text-fg">Project created — save these credentials</span>
-            </div>
-            <div className="space-y-4 p-5">
-              <p className="text-xs text-muted">
-                Add to your consumer app&apos;s <code className="rounded bg-elevated px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-fg">.env.local</code>:
-              </p>
-              <div className="code-block">
-{`AGENT_URL=https://app.feedback.chat/api/agent/${project.id}
-FEEDBACK_CHAT_API_KEY=${apiKey}`}
-              </div>
-
-              <p className="text-xs text-muted">
-                GitHub webhook for <code className="rounded bg-elevated px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-fg">{project.github_repo}</code>:
-              </p>
-              <div className="code-block">
-{`URL: https://app.feedback.chat/api/webhook/${project.id}
-Secret: ${webhookSecret}
-Content type: application/json
-Events: Issues`}
-              </div>
-
-              <div className="flex items-start gap-2 rounded-lg bg-danger/5 px-3 py-2.5">
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
-                <p className="text-xs text-danger/80">
-                  Save these now — the API key and webhook secret won&apos;t be shown again.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Setup checklist */}
+        <SetupChecklist
+          projectId={project.id}
+          githubRepo={project.github_repo}
+          webhookSecret={webhookSecret ?? project.webhook_secret}
+          apiKey={apiKey}
+          webhookUrl={webhookUrl}
+          agentUrl={agentUrl}
+          setupProgress={setupProgress}
+          hasRuns={hasRuns}
+        />
 
         {/* Runs table */}
         <div className="mb-8">
           <h2 className="mb-4 text-sm font-medium text-fg">Pipeline Runs</h2>
 
-          {!runs || runs.length === 0 ? (
+          {!hasRuns ? (
             <div className="glass-card px-5 py-10 text-center">
               <p className="text-sm text-muted">
-                No runs yet. Submit feedback through the widget to trigger a pipeline run.
+                Runs will appear here once you complete setup and send your first feedback.
               </p>
             </div>
           ) : (
@@ -198,21 +167,6 @@ Events: Issues`}
               </table>
             </div>
           )}
-        </div>
-
-        {/* Settings */}
-        <div>
-          <h2 className="mb-4 text-sm font-medium text-fg">Settings</h2>
-          <div className="glass-card space-y-4 p-5">
-            <CopyBlock
-              label="Webhook URL"
-              value={`https://app.feedback.chat/api/webhook/${project.id}`}
-            />
-            <CopyBlock
-              label="Webhook Secret"
-              value={project.webhook_secret}
-            />
-          </div>
         </div>
       </div>
     </>
