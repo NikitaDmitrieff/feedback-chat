@@ -52,16 +52,33 @@ export async function POST(
   }
 
   const action = payload.action
-  if (action !== 'opened' && action !== 'reopened') {
+  const labels: string[] = (payload.issue?.labels ?? []).map((l: { name: string }) => l.name)
+
+  // Accept: opened, reopened, or labeled with auto-implement
+  const isOpenOrReopen = action === 'opened' || action === 'reopened'
+  const isAutoImplementLabeled = action === 'labeled' && labels.includes('auto-implement')
+
+  if (!isOpenOrReopen && !isAutoImplementLabeled) {
     return NextResponse.json({ status: 'ignored' })
   }
 
-  const labels: string[] = (payload.issue?.labels ?? []).map((l: { name: string }) => l.name)
   if (!labels.includes('feedback-bot')) {
     return NextResponse.json({ status: 'ignored' })
   }
   if (labels.includes('in-progress') || labels.includes('agent-failed')) {
     return NextResponse.json({ status: 'ignored' })
+  }
+
+  // Deduplicate: skip if a pending/processing job already exists for this issue
+  const { count: existingJobs } = await supabase
+    .from('job_queue')
+    .select('*', { count: 'exact', head: true })
+    .eq('project_id', project.id)
+    .eq('github_issue_number', payload.issue.number)
+    .in('status', ['pending', 'processing'])
+
+  if (existingJobs && existingJobs > 0) {
+    return NextResponse.json({ status: 'already_queued' })
   }
 
   const issue = payload.issue

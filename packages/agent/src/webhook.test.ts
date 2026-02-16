@@ -43,7 +43,29 @@ describe('shouldProcessEvent', () => {
     expect(shouldProcessEvent('push', {})).toBe(false)
   })
 
-  it('rejects non-opened actions', () => {
+  it('accepts a labeled event with auto-implement + feedback-bot', () => {
+    const payload = {
+      action: 'labeled',
+      issue: {
+        number: 1,
+        labels: [{ name: 'feedback-bot' }, { name: 'auto-implement' }],
+      },
+    }
+    expect(shouldProcessEvent('issues', payload)).toBe(true)
+  })
+
+  it('rejects a labeled event without auto-implement', () => {
+    const payload = {
+      action: 'labeled',
+      issue: {
+        number: 1,
+        labels: [{ name: 'feedback-bot' }, { name: 'bug' }],
+      },
+    }
+    expect(shouldProcessEvent('issues', payload)).toBe(false)
+  })
+
+  it('rejects non-opened/labeled actions', () => {
     const payload = {
       action: 'closed',
       issue: { number: 1, labels: [{ name: 'feedback-bot' }] },

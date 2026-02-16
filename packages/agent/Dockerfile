@@ -39,4 +39,4 @@ RUN git config --global user.email "agent@feedback-chat" && \
 # See: https://github.com/anthropics/claude-code/issues/8938
 RUN echo '{"hasCompletedOnboarding":true}' > /home/agent/.claude.json
 
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/managed-worker.js"]

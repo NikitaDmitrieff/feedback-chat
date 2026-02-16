@@ -38,10 +38,15 @@ export function shouldProcessEvent(
   if (event !== 'issues') return false
 
   const p = payload as WebhookIssuePayload
-  if (p.action !== 'opened' && p.action !== 'reopened') return false
   if (!p.issue?.labels) return false
 
   const labelNames = p.issue.labels.map((l) => l.name)
+
+  // Accept: opened, reopened, or labeled with auto-implement
+  const isOpenOrReopen = p.action === 'opened' || p.action === 'reopened'
+  const isAutoImplementLabeled = p.action === 'labeled' && labelNames.includes('auto-implement')
+
+  if (!isOpenOrReopen && !isAutoImplementLabeled) return false
 
   if (!labelNames.includes('feedback-bot')) return false
   if (labelNames.includes('in-progress')) return false
