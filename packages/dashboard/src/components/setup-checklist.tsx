@@ -80,8 +80,9 @@ npm install react@latest react-dom@latest
 
 ### 2. Install dependencies
 \`\`\`bash
-npm install @nikitadmitrieff/feedback-chat @assistant-ui/react @assistant-ui/react-ai-sdk @assistant-ui/react-markdown ai @ai-sdk/anthropic
+npm install --save @nikitadmitrieff/feedback-chat @assistant-ui/react @assistant-ui/react-ai-sdk @assistant-ui/react-markdown ai @ai-sdk/anthropic
 \`\`\`
+**Verify** that all 6 packages appear in \`package.json\` under \`dependencies\`. If any are missing, run the install again with \`--save\`. Without them in \`package.json\`, Vercel builds will fail.
 
 ### 3. Configure Tailwind to scan the widget (CRITICAL — widget is unstyled without this)
 Find the main CSS file. Run \`find . -name "globals.css" -not -path "*/node_modules/*"\` to locate it.
