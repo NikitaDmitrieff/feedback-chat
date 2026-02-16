@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Check, ChevronDown, Copy, Loader2, Terminal, AlertCircle, Wand2 } from 'lucide-react'
 import { markStepDone, markAllStepsDone } from '@/app/projects/[id]/actions'
+import { sileo } from 'sileo'
 
 type StepKey = 'install' | 'env_vars' | 'webhook' | 'labels'
 
@@ -266,6 +267,7 @@ export function SetupChecklist({
       setPendingStep(null)
       setShowClaudePrompt(false)
       setExpandedIndex(-1)
+      sileo.success({ title: 'Setup complete' })
     })
   }
 
@@ -275,6 +277,8 @@ export function SetupChecklist({
       await markStepDone(projectId, key)
       setProgress((prev) => ({ ...prev, [key]: true }))
       setPendingStep(null)
+      const stepTitle = STEPS.find((s) => s.key === key)?.title ?? 'Step'
+      sileo.success({ title: `${stepTitle} — done` })
       // Auto-advance to next incomplete step
       const currentIdx = STEPS.findIndex((s) => s.key === key)
       const nextIncomplete = STEPS.findIndex(

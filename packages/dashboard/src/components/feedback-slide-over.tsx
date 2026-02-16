@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Loader2, Sparkles, X, ExternalLink, AlertCircle } from 'lucide-react'
+import { sileo } from 'sileo'
 import type { FeedbackMessage, FeedbackSession, FeedbackTheme } from '@/lib/types'
 
 type Props = {
@@ -34,7 +35,7 @@ export function FeedbackSlideOver({
     fetch(`/api/feedback/${projectId}/${session.id}`)
       .then((res) => res.json())
       .then((json) => setMessages(json.messages ?? []))
-      .catch(() => {})
+      .catch(() => sileo.error({ title: 'Failed to load messages' }))
       .finally(() => setLoading(false))
   }, [projectId, session.id])
 
@@ -67,21 +68,34 @@ export function FeedbackSlideOver({
           ai_summary: json.summary,
           ai_themes: json.themeIds,
         }))
+        sileo.success({ title: 'Session classified' })
+      } else {
+        sileo.error({ title: 'Classification failed' })
       }
+    } catch {
+      sileo.error({ title: 'Classification failed' })
     } finally {
       setClassifying(false)
     }
   }
 
   async function handleStatusChange(status: FeedbackSession['status']) {
-    const res = await fetch(`/api/feedback/${projectId}/${session.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    })
-    if (res.ok) {
-      setLocalSession((prev) => ({ ...prev, status }))
-      onStatusChange(session.id, status)
+    try {
+      const res = await fetch(`/api/feedback/${projectId}/${session.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (res.ok) {
+        setLocalSession((prev) => ({ ...prev, status }))
+        onStatusChange(session.id, status)
+        const label = status === 'resolved' ? 'Resolved' : status === 'dismissed' ? 'Dismissed' : status
+        sileo.success({ title: `Feedback ${label.toLowerCase()}` })
+      } else {
+        sileo.error({ title: 'Failed to update status' })
+      }
+    } catch {
+      sileo.error({ title: 'Failed to update status' })
     }
   }
 
