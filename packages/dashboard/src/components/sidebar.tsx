@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { MessageSquareText, FolderKanban, LogOut, Pin, PinOff } from 'lucide-react'
+import { MessageSquareText, FolderKanban, MessageSquare, LogOut, Pin, PinOff } from 'lucide-react'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -20,6 +20,9 @@ export function Sidebar() {
     setPinned(next)
     localStorage.setItem('sidebar-pinned', String(next))
   }
+
+  const projectMatch = pathname.match(/\/projects\/([^/]+)/)
+  const projectId = projectMatch ? projectMatch[1] : null
 
   const expanded = pinned || hovered
 
@@ -61,6 +64,23 @@ export function Sidebar() {
         </div>
         {expanded && <span className="truncate text-xs">Projects</span>}
       </Link>
+
+      {/* Feedback (contextual — only when inside a project) */}
+      {projectId && (
+        <Link
+          href={`/projects/${projectId}/feedback`}
+          className={`flex items-center rounded-[16px] transition-colors ${
+            pathname.includes('/feedback')
+              ? 'bg-white/[0.08] text-fg'
+              : 'text-muted hover:bg-white/[0.06] hover:text-fg'
+          } ${expanded ? 'gap-2.5 px-2 py-2' : 'justify-center p-1.5'}`}
+        >
+          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center">
+            <MessageSquare className="h-[15px] w-[15px]" />
+          </div>
+          {expanded && <span className="truncate text-xs">Feedback</span>}
+        </Link>
+      )}
 
       {/* Divider */}
       <div className={`my-1 h-px bg-white/[0.06] ${expanded ? 'mx-2' : 'mx-auto w-5'}`} />
