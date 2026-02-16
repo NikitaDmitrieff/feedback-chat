@@ -23,4 +23,9 @@ export default defineConfig([
     format: ['esm'],
     banner: { js: '#!/usr/bin/env node' },
   },
+  {
+    entry: { 'cli/deploy-agent': 'src/cli/deploy-agent.ts' },
+    format: ['esm'],
+    banner: { js: '#!/usr/bin/env node' },
+  },
 ])
