@@ -22,7 +22,7 @@ export function Sidebar() {
   }
 
   const projectMatch = pathname.match(/\/projects\/([^/]+)/)
-  const projectId = projectMatch ? projectMatch[1] : null
+  const projectId = projectMatch && projectMatch[1] !== 'new' ? projectMatch[1] : null
 
   const expanded = pinned || hovered
 
@@ -35,9 +35,8 @@ export function Sidebar() {
       }`}
     >
       {/* Logo */}
-      <Link
-        href="/projects"
-        className={`flex items-center rounded-[16px] transition-colors hover:bg-white/[0.06] ${
+      <div
+        className={`flex items-center ${
           expanded ? 'gap-2.5 px-2 py-2' : 'justify-center p-1.5'
         }`}
       >
@@ -45,7 +44,7 @@ export function Sidebar() {
           <MessageSquareText className="h-[14px] w-[14px] text-muted" />
         </div>
         {expanded && <span className="truncate text-xs font-medium text-fg">Feedback Chat</span>}
-      </Link>
+      </div>
 
       {/* Divider */}
       <div className={`my-1 h-px bg-white/[0.06] ${expanded ? 'mx-2' : 'mx-auto w-5'}`} />

@@ -53,61 +53,72 @@ function generateClaudePrompt({
   agentUrl: string
   apiKey?: string
 }): string {
-  const apiKeyValue = apiKey ?? '<your FEEDBACK_CHAT_API_KEY>'
+  const passwordValue = apiKey ?? 'easy'
 
   return `Install @nikitadmitrieff/feedback-chat (full Pipeline tier) in this Next.js project.
 
-## Before you start — common blockers that waste 30+ minutes if missed
+## Before you start — blockers that waste 30+ minutes if missed
 
-1. **Tailwind v4 @source is mandatory** — the widget renders completely unstyled without it (step 3)
-2. **React 19.1.0 and 19.1.1 are excluded** by @ai-sdk/react — build will fail (step 1)
-3. **Detect the app directory first** — routes may live in \`app/\` or \`src/app/\` depending on the project
-4. **All 5 env vars are required** — ANTHROPIC_API_KEY, FEEDBACK_CHAT_API_KEY, GITHUB_TOKEN, GITHUB_REPO, AGENT_URL
-5. **FeedbackPanel only accepts \`isOpen\` and \`onToggle\`** — no statusUrl, no apiUrl prop needed
+1. **Tailwind @source is mandatory** — the widget renders completely unstyled without it (step 3). Tailwind v4 uses \`@source\` in CSS; Tailwind v3 uses the \`content\` array in \`tailwind.config\`.
+2. **React 19.1.0 and 19.1.1 are excluded** by \`@ai-sdk/react\` — build will fail (step 1)
+3. **FeedbackPanel only accepts \`isOpen\` and \`onToggle\`** — no statusUrl, no apiUrl prop needed (defaults to \`/api/feedback/chat\`)
+4. **All 5 env vars are required** — \`ANTHROPIC_API_KEY\`, \`FEEDBACK_PASSWORD\`, \`GITHUB_TOKEN\`, \`GITHUB_REPO\`, \`AGENT_URL\`
+5. **\`GITHUB_TOKEN\` must be a PAT (\`ghp_\` prefix)** — do NOT use \`gh auth token\` (returns \`gho_\` OAuth token that expires in ~8h)
 
-## Dashboard credentials (pre-filled — do NOT change)
-FEEDBACK_CHAT_API_KEY=${apiKeyValue}
+## Dashboard credentials (pre-filled — do NOT change these values)
+FEEDBACK_PASSWORD=${passwordValue}
 GITHUB_REPO=${githubRepo}
 AGENT_URL=${agentUrl}
 
 ## Steps
 
 ### 1. Check React version
-Run \`npm ls react\`. If the version is 19.1.0 or 19.1.1, upgrade:
+Run \`npm ls react\`. If the version is 19.1.0 or 19.1.1, upgrade first:
+\`\`\`bash
 npm install react@latest react-dom@latest
+\`\`\`
 
 ### 2. Install dependencies
+\`\`\`bash
 npm install @nikitadmitrieff/feedback-chat @assistant-ui/react @assistant-ui/react-ai-sdk @assistant-ui/react-markdown ai @ai-sdk/anthropic
+\`\`\`
 
-### 3. Configure Tailwind to scan the widget (CRITICAL)
-Find the main CSS file (usually \`globals.css\` or \`app/globals.css\`).
+### 3. Configure Tailwind to scan the widget (CRITICAL — widget is unstyled without this)
+Find the main CSS file. Run \`find . -name "globals.css" -not -path "*/node_modules/*"\` to locate it.
 
-**Tailwind v4** (look for \`@import "tailwindcss"\` in the CSS file) — add this line AFTER the import:
+**If using Tailwind v4** (the CSS file contains \`@import "tailwindcss"\`):
+Add this line AFTER the \`@import "tailwindcss"\` line:
+\`\`\`css
 @source "../node_modules/@nikitadmitrieff/feedback-chat/dist/**/*.js";
+\`\`\`
 
-**Tailwind v3** (look for \`tailwind.config.js\` or \`tailwind.config.ts\`) — add to the \`content\` array:
+**If using Tailwind v3** (project has \`tailwind.config.js\` or \`tailwind.config.ts\`):
+Add to the \`content\` array:
+\`\`\`js
 "./node_modules/@nikitadmitrieff/feedback-chat/dist/**/*.js"
-
-Without this, the widget renders with no styles at all.
+\`\`\`
 
 ### 4. Set environment variables in .env.local
-Check which of these already exist and add any that are missing:
+Detect the app directory first: run \`ls app 2>/dev/null || ls src/app 2>/dev/null\` to determine if routes live in \`app/\` or \`src/app/\`.
 
-ANTHROPIC_API_KEY=<REQUIRED — powers the AI chat. Ask the user if not already in .env.local>
-FEEDBACK_CHAT_API_KEY=${apiKeyValue}
-GITHUB_TOKEN=<REQUIRED — must be a ghp_ PAT (not gho_ OAuth). If not set, ask the user to create one at github.com/settings/tokens/new with repo + workflow scopes>
+Check which of these already exist in \`.env.local\` and add any that are missing:
+\`\`\`env
+ANTHROPIC_API_KEY=<REQUIRED — powers the AI chat. Ask the user if not already set>
+FEEDBACK_PASSWORD=${passwordValue}
+GITHUB_TOKEN=<REQUIRED — must be a ghp_ PAT from github.com/settings/tokens/new with repo + workflow scopes>
 GITHUB_REPO=${githubRepo}
 AGENT_URL=${agentUrl}
-
-IMPORTANT: \`GITHUB_TOKEN\` must start with \`ghp_\`. Tokens from \`gh auth token\` start with \`gho_\` and expire in ~8 hours.
+\`\`\`
 
 ### 5. Create chat API route
-Detect whether the project uses \`app/\` or \`src/app/\`, then create \`<app-dir>/api/feedback/chat/route.ts\`:
+Create the route in whichever app directory exists (\`app/\` or \`src/app/\`):
+File: \`<app-dir>/api/feedback/chat/route.ts\`
 
+\`\`\`ts
 import { createFeedbackHandler } from '@nikitadmitrieff/feedback-chat/server'
 
 const handler = createFeedbackHandler({
-  password: process.env.FEEDBACK_CHAT_API_KEY!,
+  password: process.env.FEEDBACK_PASSWORD!,
   github: {
     token: process.env.GITHUB_TOKEN!,
     repo: process.env.GITHUB_REPO!,
@@ -115,14 +126,16 @@ const handler = createFeedbackHandler({
 })
 
 export const POST = handler.POST
+\`\`\`
 
 ### 6. Create status API route
-Create \`<app-dir>/api/feedback/status/route.ts\`:
+File: \`<app-dir>/api/feedback/status/route.ts\`
 
+\`\`\`ts
 import { createStatusHandler } from '@nikitadmitrieff/feedback-chat/server'
 
 const handler = createStatusHandler({
-  password: process.env.FEEDBACK_CHAT_API_KEY!,
+  password: process.env.FEEDBACK_PASSWORD!,
   github: {
     token: process.env.GITHUB_TOKEN!,
     repo: process.env.GITHUB_REPO!,
@@ -131,10 +144,12 @@ const handler = createStatusHandler({
 })
 
 export const { GET, POST } = handler
+\`\`\`
 
 ### 7. Create client wrapper component
-Create a 'use client' component (e.g., \`components/FeedbackButton.tsx\`):
+Create \`components/FeedbackButton.tsx\` (or \`src/components/FeedbackButton.tsx\` if using \`src/\`):
 
+\`\`\`tsx
 'use client'
 import { useState } from 'react'
 import { FeedbackPanel } from '@nikitadmitrieff/feedback-chat'
@@ -144,33 +159,38 @@ export function FeedbackButton() {
   const [open, setOpen] = useState(false)
   return <FeedbackPanel isOpen={open} onToggle={() => setOpen(!open)} />
 }
+\`\`\`
 
 ### 8. Add to root layout
 Import and render \`<FeedbackButton />\` inside \`<body>\` in the root layout (Server Component).
 
 ### 9. Create GitHub labels
-gh label create feedback-bot --color 0E8A16 --repo ${githubRepo}
-gh label create auto-implement --color 1D76DB --repo ${githubRepo}
-gh label create in-progress --color FBCA04 --repo ${githubRepo}
-gh label create agent-failed --color D93F0B --repo ${githubRepo}
-gh label create preview-pending --color C5DEF5 --repo ${githubRepo}
-gh label create rejected --color E4E669 --repo ${githubRepo}
+\`\`\`bash
+gh label create feedback-bot --color 0E8A16 --repo ${githubRepo} --force
+gh label create auto-implement --color 1D76DB --repo ${githubRepo} --force
+gh label create in-progress --color FBCA04 --repo ${githubRepo} --force
+gh label create agent-failed --color D93F0B --repo ${githubRepo} --force
+gh label create preview-pending --color C5DEF5 --repo ${githubRepo} --force
+gh label create rejected --color E4E669 --repo ${githubRepo} --force
+\`\`\`
 
 ### 10. Configure GitHub webhook
+\`\`\`bash
 gh api repos/${githubRepo}/hooks \\
   -f name=web -F active=true \\
   -f "config[url]=${webhookUrl}" \\
   -f "config[content_type]=json" \\
   -f "config[secret]=${webhookSecret}" \\
   -f 'events[]=issues'
+\`\`\`
+IMPORTANT: Use \`-F\` (capital F) for \`active=true\` — lowercase \`-f\` sends the string "true" and GitHub returns 422. The \`config[content_type]=json\` is also required — without it the default is form-urlencoded and the agent returns 415.
 
-IMPORTANT: Use -F (capital F) for active=true — lowercase -f sends the string "true" which GitHub rejects with HTTP 422.
-
-## After installation
-- **Restart the dev server** after creating the new route files — HMR may not pick them up
-- If routes return 404 or the widget shows raw HTML, clear the cache: rm -rf .next && npm run dev
-- If using Next.js 15+ with Turbopack and seeing persistence/panic errors, switch to Webpack: npx next dev --turbopack=false
-- The password to enter in the widget is the FEEDBACK_CHAT_API_KEY value: ${apiKeyValue}`
+## After installation — MUST DO
+1. **Restart the dev server** — HMR may not pick up new route files
+2. **Verify the browser is on the correct port** — if the dev server started on a new port, make sure the browser tab matches
+3. If routes return 404 or the widget shows raw HTML instead of a response, clear the cache: \`rm -rf .next && npm run dev\`
+4. If using Next.js 15+ with Turbopack and seeing persistence/panic errors, switch to Webpack: \`npx next dev --turbopack=false\`
+5. The password to enter in the widget is: ${passwordValue}`
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -499,7 +519,7 @@ function StepContent({
           </p>
           <CodeBlock>
             {`ANTHROPIC_API_KEY=<your Anthropic API key>
-FEEDBACK_CHAT_API_KEY=${apiKey ?? 'fc_live_...'}
+FEEDBACK_PASSWORD=${apiKey ?? 'easy'}
 GITHUB_TOKEN=<ghp_ PAT with repo + workflow scopes>
 GITHUB_REPO=${githubRepo}
 AGENT_URL=${agentUrl}`}

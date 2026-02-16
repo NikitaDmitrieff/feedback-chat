@@ -153,3 +153,37 @@ railway domain 2>&1 | grep -oE 'https://[^ ]+'
 **Cause:** `gh auth token` returns a `gho_` OAuth token that expires after ~8 hours. This is NOT a Personal Access Token.
 
 **Fix:** Do not use `gh auth token` for `GITHUB_TOKEN`. Generate a PAT (`ghp_` prefix) at [github.com/settings/tokens/new](https://github.com/settings/tokens/new) with `repo` + `workflow` scopes. PATs don't expire (unless you set an expiry).
+
+## Turbopack cache corruption (Next.js 15+)
+
+**Cause:** Turbopack's persistent cache can corrupt after installing new dependencies or modifying `.env.local` while the dev server is running. Symptoms include:
+- Routes returning unexpected 404 errors
+- `thread 'tokio-runtime-worker' panicked` in terminal output
+- `Persisting failed: Failed to compact database` errors
+- `Unable to open static sorted file` errors
+
+**Fix:**
+```bash
+rm -rf .next
+npx next dev --turbopack=false
+```
+
+Using Webpack (`--turbopack=false`) avoids the cache corruption entirely. If you prefer Turbopack, stop the dev server before changing `.env.local` or installing packages, then clear `.next/` and restart.
+
+## Widget shows raw HTML instead of chat response
+
+**Cause:** The browser is connected to a dev server on a different port than the one that has the feedback routes. This happens when the dev server restarts on a new port after installation.
+
+**Fix:**
+1. Check which port the dev server is running on (terminal output)
+2. Make sure the browser tab matches that port
+3. If unsure, close all dev server instances and restart: `npm run dev`
+
+## Routes return 404 after installing the widget
+
+**Cause:** HMR may not pick up newly created route files, especially with Turbopack.
+
+**Fix:**
+1. Stop the dev server (Ctrl+C)
+2. Clear the cache: `rm -rf .next`
+3. Restart: `npm run dev`
