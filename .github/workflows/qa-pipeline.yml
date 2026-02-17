@@ -57,31 +57,6 @@ jobs:
           echo "Dashboard not reachable after 2 minutes"
           exit 1
 
-      - name: Check agent health
-        run: |
-          RESPONSE=$(curl -sf "${{ vars.AGENT_URL }}/health" 2>&1) || {
-            echo "::warning::Agent unreachable at ${{ vars.AGENT_URL }}/health"
-            echo "Agent is not reachable — skipping pipeline tests"
-            exit 1
-          }
-
-          STATUS=$(echo "$RESPONSE" | jq -r '.status')
-          CURRENT_JOB=$(echo "$RESPONSE" | jq -r '.currentJob')
-
-          if [ "$STATUS" != "ok" ]; then
-            echo "::warning::Agent health status is '$STATUS' (expected 'ok')"
-            echo "Agent is unhealthy — skipping pipeline tests"
-            exit 1
-          fi
-
-          if [ "$CURRENT_JOB" != "null" ]; then
-            echo "::warning::Agent is busy with job: $CURRENT_JOB"
-            echo "Agent is busy — skipping pipeline tests"
-            exit 1
-          fi
-
-          echo "Agent is healthy and idle"
-
       - name: Run pipeline E2E tests
         id: e2e
         continue-on-error: true
@@ -93,7 +68,6 @@ jobs:
           QA_TEST_EMAIL: ${{ vars.QA_TEST_EMAIL }}
           QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AGENT_URL: ${{ vars.AGENT_URL }}
           SANDBOX_REPO: ${{ vars.SANDBOX_REPO }}
           SANDBOX_KNOWN_GOOD_SHA: ${{ vars.SANDBOX_KNOWN_GOOD_SHA }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}

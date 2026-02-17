@@ -7,10 +7,13 @@ import {
   getIssueState,
   closeArtifacts,
   waitForDeployment,
+  createWebhook,
+  deleteWebhook,
 } from './helpers/pipeline'
 import { verifySandboxClean, resetSandbox, cleanSandboxArtifacts } from './helpers/sandbox'
 
 const SANDBOX_REPO = process.env.SANDBOX_REPO || 'NikitaDmitrieff/qa-feedback-sandbox'
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://loop.joincoby.com'
 const QA_TEST_PASSWORD = process.env.QA_TEST_PASSWORD || 'qa-test-password-2026'
 
 // ---------------------------------------------------------------------------
@@ -18,6 +21,7 @@ const QA_TEST_PASSWORD = process.env.QA_TEST_PASSWORD || 'qa-test-password-2026'
 // ---------------------------------------------------------------------------
 
 let projectId: string
+let webhookId: number
 let issueNumber: number
 let prNumber: number | null = null
 let previewUrl: string
@@ -41,9 +45,8 @@ test.describe.serial('Pipeline E2E', () => {
 
   test.afterAll(async () => {
     try {
-      if (issueNumber) {
-        await closeArtifacts(SANDBOX_REPO, issueNumber, prNumber)
-      }
+      if (webhookId) await deleteWebhook(SANDBOX_REPO, webhookId)
+      if (issueNumber) await closeArtifacts(SANDBOX_REPO, issueNumber, prNumber)
       await cleanSandboxArtifacts()
       await resetSandbox()
     } catch {
@@ -52,11 +55,16 @@ test.describe.serial('Pipeline E2E', () => {
   })
 
   test('Step 1: Submit feedback that creates a GitHub issue', async ({ page }) => {
-    test.setTimeout(60_000)
+    test.setTimeout(90_000)
 
     // Create a pipeline project and navigate to it
     const result = await createPipelineProject(page)
     projectId = result.projectId
+
+    // Create a webhook on the sandbox repo pointing to the dashboard webhook endpoint.
+    // The dashboard receives the issue event and enqueues a job for the worker.
+    const webhookUrl = `${DASHBOARD_URL}/api/webhook/${projectId}`
+    webhookId = await createWebhook(SANDBOX_REPO, webhookUrl, result.webhookSecret)
 
     // Open the feedback panel via the trigger bar button
     const triggerBar = page.locator('.feedback-trigger-bar button')
@@ -155,8 +163,7 @@ test.describe.serial('Pipeline E2E', () => {
     expect(prNumber, 'prNumber must be set by Step 3').toBeTruthy()
 
     // Call the dashboard status API to approve (same mechanism as PipelineTracker)
-    const dashboardUrl = process.env.DASHBOARD_URL || 'https://loop.joincoby.com'
-    const statusUrl = `${dashboardUrl}/api/feedback/status?issue=${issueNumber}&action=approve`
+    const statusUrl = `${DASHBOARD_URL}/api/feedback/status?issue=${issueNumber}&action=approve`
     const res = await fetch(statusUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -175,6 +182,9 @@ test.describe.serial('Pipeline E2E', () => {
 
   test('Step 7: Cleanup — reset sandbox to known-good state', async () => {
     test.setTimeout(30_000)
+
+    // Delete the dynamic webhook
+    if (webhookId) await deleteWebhook(SANDBOX_REPO, webhookId)
 
     // Close any remaining artifacts
     if (issueNumber) {

@@ -90,5 +90,5 @@ export async function createPipelineProject(page: Page) {
   await page.goto(`/projects/${project.id}`)
   await page.waitForLoadState('networkidle')
 
-  return { projectId: project.id, projectName, url: page.url() }
+  return { projectId: project.id, projectName, webhookSecret, url: page.url() }
 }

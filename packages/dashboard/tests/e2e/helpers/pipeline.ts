@@ -246,3 +246,49 @@ export async function closeArtifacts(
   })
   // Branch deletion may 422 if it doesn't exist — that's fine
 }
+
+// ---------------------------------------------------------------------------
+// Webhook management (dynamic per test run)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a webhook on the sandbox repo pointing to the dashboard webhook endpoint.
+ * The webhook URL includes the projectId so the dashboard knows which project to enqueue for.
+ * Returns the webhook ID for later deletion.
+ */
+export async function createWebhook(
+  repo: string,
+  webhookUrl: string,
+  secret: string,
+): Promise<number> {
+  const res = await fetch(`${API}/repos/${repo}/hooks`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({
+      name: 'web',
+      active: true,
+      config: {
+        url: webhookUrl,
+        content_type: 'json',
+        secret,
+      },
+      events: ['issues'],
+    }),
+  })
+  if (!res.ok) {
+    throw new Error(`createWebhook failed: ${res.status} ${await res.text()}`)
+  }
+  const data = await res.json()
+  return data.id as number
+}
+
+/**
+ * Delete a webhook from a repo.
+ */
+export async function deleteWebhook(repo: string, webhookId: number): Promise<void> {
+  await fetch(`${API}/repos/${repo}/hooks/${webhookId}`, {
+    method: 'DELETE',
+    headers: headers(),
+  })
+  // 404 is fine — already deleted
+}
