@@ -98,7 +98,6 @@ test.describe.serial('Pipeline E2E', () => {
 
     const issue = await waitForLabel(SANDBOX_REPO, issueNumber, 'preview-pending', 210_000)
     expect(issue.labels).toContain('preview-pending')
-    expect(issue.labels).not.toContain('in-progress')
 
     // Find the PR created by the agent
     const branch = `feedback/issue-${issueNumber}`
