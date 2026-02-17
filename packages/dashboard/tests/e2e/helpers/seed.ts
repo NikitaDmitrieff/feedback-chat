@@ -45,10 +45,11 @@ export async function ensureTestUser() {
  */
 export async function cleanupTestProjects() {
   const supabase = adminClient()
+  // Clean up both onboarding (qa-test-*) and pipeline (qa-pipeline-*) projects
   const { data: projects } = await supabase
     .from('projects')
     .select('id')
-    .like('name', 'qa-test-%')
+    .or('name.like.qa-test-%,name.like.qa-pipeline-%')
 
   if (!projects || projects.length === 0) return
 
