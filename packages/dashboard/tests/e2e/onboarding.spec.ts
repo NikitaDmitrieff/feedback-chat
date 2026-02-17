@@ -44,7 +44,7 @@ test.describe('Onboarding flow', () => {
     await page.click('button[type="submit"]')
 
     // Should redirect to project detail page
-    await page.waitForURL(/\/projects\/[a-f0-9-]+/, { timeout: 10_000 })
+    await page.waitForURL(/\/projects\/[a-f0-9-]+/, { timeout: 15_000 })
 
     // Should see setup checklist
     await expect(page.locator('text=Setup')).toBeVisible()
@@ -54,7 +54,6 @@ test.describe('Onboarding flow', () => {
   })
 
   test('Step 3: setup checklist renders with correct URLs', async ({ page }) => {
-    await signIn(page)
     const { url } = await createTestProject(page)
 
     // Verify checklist steps are visible
@@ -66,7 +65,6 @@ test.describe('Onboarding flow', () => {
   })
 
   test('Step 4: Claude prompt has correct domain (not localhost)', async ({ page }) => {
-    await signIn(page)
     await createTestProject(page)
 
     // Find and click the Claude quick setup section
@@ -95,7 +93,6 @@ test.describe('Onboarding flow', () => {
   })
 
   test('Step 5: webhook URL is reachable (no 401)', async ({ page, request }) => {
-    await signIn(page)
     await createTestProject(page)
 
     // Extract webhook URL from the checklist

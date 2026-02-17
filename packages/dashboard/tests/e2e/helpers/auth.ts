@@ -18,6 +18,8 @@ export async function signIn(page: Page) {
 }
 
 export async function createTestProject(page: Page, name?: string) {
+  // Each test gets a fresh browser context — sign in first
+  await signIn(page)
   const projectName = name ?? `qa-test-${Date.now()}`
   await page.goto('/projects/new')
   await page.waitForLoadState('networkidle')
