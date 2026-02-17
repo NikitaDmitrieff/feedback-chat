@@ -67,7 +67,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           QA_TEST_EMAIL: ${{ vars.QA_TEST_EMAIL }}
           QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           SANDBOX_REPO: ${{ vars.SANDBOX_REPO }}
           SANDBOX_KNOWN_GOOD_SHA: ${{ vars.SANDBOX_KNOWN_GOOD_SHA }}
         run: npx playwright test pipeline.spec.ts
