@@ -13,6 +13,7 @@ import {
   mergePR,
 } from './helpers/pipeline'
 import { verifySandboxClean, resetSandbox, cleanSandboxArtifacts } from './helpers/sandbox'
+import { cleanupTestProjects } from './helpers/seed'
 
 const SANDBOX_REPO = process.env.SANDBOX_REPO || 'NikitaDmitrieff/qa-feedback-sandbox'
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://loop.joincoby.com'
@@ -41,6 +42,7 @@ function sleep(ms: number): Promise<void> {
 
 test.describe.serial('Pipeline E2E', () => {
   test.beforeAll(async () => {
+    await cleanupTestProjects()
     await verifySandboxClean()
   })
 
@@ -50,6 +52,7 @@ test.describe.serial('Pipeline E2E', () => {
       if (issueNumber) await closeArtifacts(SANDBOX_REPO, issueNumber, prNumber)
       await cleanSandboxArtifacts()
       await resetSandbox()
+      await cleanupTestProjects()
     } catch {
       // Cleanup errors must not mask test failures
     }

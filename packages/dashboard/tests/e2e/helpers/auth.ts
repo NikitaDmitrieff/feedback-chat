@@ -86,6 +86,22 @@ export async function createPipelineProject(page: Page) {
 
   if (error) throw new Error(`Failed to create pipeline project: ${error.message}`)
 
+  // Copy credentials from an existing project so the managed worker can
+  // authenticate Claude CLI when processing jobs for this test project.
+  const { data: existingCreds } = await supabase
+    .from('credentials')
+    .select('type, encrypted_value')
+    .limit(1)
+    .single()
+
+  if (existingCreds) {
+    await supabase.from('credentials').insert({
+      project_id: project.id,
+      type: existingCreds.type,
+      encrypted_value: existingCreds.encrypted_value,
+    })
+  }
+
   // Navigate to the project detail page
   await page.goto(`/projects/${project.id}`)
   await page.waitForLoadState('networkidle')
