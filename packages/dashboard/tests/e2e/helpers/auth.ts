@@ -91,6 +91,7 @@ export async function createPipelineProject(page: Page) {
   const { data: existingCreds } = await supabase
     .from('credentials')
     .select('type, encrypted_value')
+    .eq('type', 'claude_oauth')
     .limit(1)
     .single()
 
