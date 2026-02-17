@@ -31,7 +31,8 @@ export async function updateSession(request: NextRequest) {
   const isPublicRoute = request.nextUrl.pathname === '/login' ||
     request.nextUrl.pathname.startsWith('/auth/') ||
     request.nextUrl.pathname.startsWith('/api/webhook') ||
-    request.nextUrl.pathname.startsWith('/api/agent')
+    request.nextUrl.pathname.startsWith('/api/agent') ||
+    request.nextUrl.pathname.startsWith('/api/github-app')
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
