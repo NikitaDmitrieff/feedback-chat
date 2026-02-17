@@ -148,4 +148,43 @@ test.describe.serial('Pipeline E2E', () => {
     await expect(footer).toBeVisible({ timeout: 10_000 })
     await expect(footer).toContainText('Built with feedback-chat')
   })
+
+  test('Step 6: Approve merges the PR', async () => {
+    test.setTimeout(30_000)
+    expect(issueNumber, 'issueNumber must be set by Step 1').toBeTruthy()
+    expect(prNumber, 'prNumber must be set by Step 3').toBeTruthy()
+
+    // Call the dashboard status API to approve (same mechanism as PipelineTracker)
+    const dashboardUrl = process.env.DASHBOARD_URL || 'https://loop.joincoby.com'
+    const statusUrl = `${dashboardUrl}/api/feedback/status?issue=${issueNumber}&action=approve`
+    const res = await fetch(statusUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: QA_TEST_PASSWORD }),
+    })
+
+    expect(res.ok, `Approve request failed: ${res.status}`).toBe(true)
+    const data = await res.json()
+    expect(data.approved).toBe(true)
+
+    // Verify: PR is merged, issue is closed
+    await sleep(2_000) // allow GitHub to process
+    const issueState = await getIssueState(SANDBOX_REPO, issueNumber)
+    expect(issueState.state).toBe('closed')
+  })
+
+  test('Step 7: Cleanup — reset sandbox to known-good state', async () => {
+    test.setTimeout(30_000)
+
+    // Close any remaining artifacts
+    if (issueNumber) {
+      await closeArtifacts(SANDBOX_REPO, issueNumber, prNumber)
+    }
+    await cleanSandboxArtifacts()
+    await resetSandbox()
+
+    // Verify sandbox is clean
+    const issue = await findIssueByTitle(SANDBOX_REPO, '[Feedback]')
+    expect(issue).toBeNull()
+  })
 })
