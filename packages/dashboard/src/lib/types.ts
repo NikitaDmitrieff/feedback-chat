@@ -63,3 +63,21 @@ export type TesterSummary = {
   resolved_count: number
   total_count: number
 }
+
+export type SetupStatus =
+  | 'pending'
+  | 'installing'
+  | 'queued'
+  | 'cloning'
+  | 'generating'
+  | 'committing'
+  | 'pr_created'
+  | 'complete'
+  | 'failed'
+
+export type ProjectSetupInfo = {
+  github_installation_id: number | null
+  setup_status: SetupStatus
+  setup_pr_url: string | null
+  setup_error: string | null
+}
