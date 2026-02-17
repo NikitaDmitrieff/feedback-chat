@@ -1,0 +1,146 @@
+name: QA Pipeline Loop
+
+on:
+  # Manual trigger — start a test run anytime
+  workflow_dispatch:
+
+  # Re-run when a qa-pipeline issue is closed (fix deployed)
+  issues:
+    types: [closed]
+
+  # Re-run after deployment completes (Vercel sends deployment_status)
+  deployment_status:
+
+concurrency:
+  group: qa-pipeline
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  test-pipeline:
+    # Only run on: manual trigger, qa-pipeline issue closed, or successful deploy
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'qa-pipeline')) ||
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: packages/dashboard
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for deployment to be live
+        run: |
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ vars.DASHBOARD_URL }}/login")
+            if [ "$STATUS" = "200" ]; then
+              echo "Dashboard is live"
+              exit 0
+            fi
+            echo "Waiting for dashboard... (attempt $i, status=$STATUS)"
+            sleep 10
+          done
+          echo "Dashboard not reachable after 2 minutes"
+          exit 1
+
+      - name: Check agent health
+        run: |
+          RESPONSE=$(curl -sf "${{ vars.AGENT_URL }}/health" 2>&1) || {
+            echo "::warning::Agent unreachable at ${{ vars.AGENT_URL }}/health"
+            echo "Agent is not reachable — skipping pipeline tests"
+            exit 1
+          }
+
+          STATUS=$(echo "$RESPONSE" | jq -r '.status')
+          CURRENT_JOB=$(echo "$RESPONSE" | jq -r '.currentJob')
+
+          if [ "$STATUS" != "ok" ]; then
+            echo "::warning::Agent health status is '$STATUS' (expected 'ok')"
+            echo "Agent is unhealthy — skipping pipeline tests"
+            exit 1
+          fi
+
+          if [ "$CURRENT_JOB" != "null" ]; then
+            echo "::warning::Agent is busy with job: $CURRENT_JOB"
+            echo "Agent is busy — skipping pipeline tests"
+            exit 1
+          fi
+
+          echo "Agent is healthy and idle"
+
+      - name: Run pipeline E2E tests
+        id: e2e
+        continue-on-error: true
+        working-directory: packages/dashboard
+        env:
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          QA_TEST_EMAIL: ${{ vars.QA_TEST_EMAIL }}
+          QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGENT_URL: ${{ vars.AGENT_URL }}
+          SANDBOX_REPO: ${{ vars.SANDBOX_REPO }}
+          SANDBOX_KNOWN_GOOD_SHA: ${{ vars.SANDBOX_KNOWN_GOOD_SHA }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: npx playwright test pipeline.spec.ts
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-pipeline-results
+          path: packages/dashboard/test-results/
+          retention-days: 7
+
+      - name: File issue on failure
+        if: steps.e2e.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Parse results and format issue body using tsx for TypeScript support
+          BODY=$(npx tsx -e "
+            import { parseResults, formatIssueBody } from './packages/dashboard/tests/e2e/helpers/report.ts';
+            const results = parseResults('./packages/dashboard/test-results/results.json');
+            const url = 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}';
+            console.log(formatIssueBody(results, url));
+          " 2>/dev/null || echo "QA pipeline tests failed. See [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.")
+
+          # Check if an open qa-pipeline issue already exists
+          EXISTING=$(gh issue list --label qa-pipeline --state open --json number --jq '.[0].number' 2>/dev/null)
+
+          if [ -n "$EXISTING" ]; then
+            echo "Updating existing issue #$EXISTING"
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            echo "Creating new issue"
+            gh issue create \
+              --title "QA: pipeline test failures — $(date +%Y-%m-%d)" \
+              --label "feedback-bot,auto-implement,qa-pipeline" \
+              --body "$BODY"
+          fi
+
+      - name: Comment on success
+        if: steps.e2e.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh issue list --label qa-pipeline --state open --json number --jq '.[0].number' 2>/dev/null)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "All pipeline tests passing. Closing."
+            gh issue close "$EXISTING"
+          fi
