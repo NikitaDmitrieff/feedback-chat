@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.44",
+    "@octokit/app": "^16.1.2",
+    "@octokit/rest": "^22.0.1",
     "@supabase/ssr": "^0.5",
     "@supabase/supabase-js": "^2",
     "@tailwindcss/postcss": "^4.1.18",
