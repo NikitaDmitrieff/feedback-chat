@@ -15,6 +15,10 @@ concurrency:
   group: qa-onboarding
   cancel-in-progress: false
 
+permissions:
+  issues: write
+  contents: read
+
 jobs:
   test-onboarding:
     # Only run on: manual trigger, qa-onboarding issue closed, or successful deploy

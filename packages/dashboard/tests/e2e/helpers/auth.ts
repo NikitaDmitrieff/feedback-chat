@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test'
+import { Page, expect } from '@playwright/test'
 
 const EMAIL = process.env.QA_TEST_EMAIL || 'qa-bot@feedback.chat'
 const PASSWORD = process.env.QA_TEST_PASSWORD || 'qa-test-password-2026'
@@ -25,6 +25,18 @@ export async function createTestProject(page: Page, name?: string) {
   await page.fill('input[name="github_repo"]', 'NikitaDmitrieff/european-art-vault')
   await page.selectOption('select[name="credential_type"]', 'claude_oauth')
   await page.click('button[type="submit"]')
-  await page.waitForURL(/\/projects\/[a-f0-9-]+/, { timeout: 10_000 })
+
+  // Server action redirects on success; if it stays on /new, the action failed
+  try {
+    await page.waitForURL(/\/projects\/[a-f0-9-]+/, { timeout: 15_000 })
+  } catch {
+    // Capture page content for debugging
+    const url = page.url()
+    const bodyText = await page.locator('body').textContent()
+    throw new Error(
+      `Project creation failed — page stayed on ${url}.\n` +
+      `Page content: ${bodyText?.slice(0, 500)}`
+    )
+  }
   return { projectName, url: page.url() }
 }
