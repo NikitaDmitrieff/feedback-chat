@@ -1,8 +1,14 @@
 import { test, expect } from '@playwright/test'
 import { createPipelineProject } from './helpers/auth'
-import { findIssueByTitle, waitForLabel, findPR } from './helpers/pipeline'
+import {
+  findIssueByTitle,
+  waitForLabel,
+  findPR,
+  getIssueState,
+  closeArtifacts,
+  waitForDeployment,
+} from './helpers/pipeline'
 import { verifySandboxClean, resetSandbox, cleanSandboxArtifacts } from './helpers/sandbox'
-import { closeArtifacts } from './helpers/pipeline'
 
 const SANDBOX_REPO = process.env.SANDBOX_REPO || 'NikitaDmitrieff/qa-feedback-sandbox'
 const QA_TEST_PASSWORD = process.env.QA_TEST_PASSWORD || 'qa-test-password-2026'
@@ -113,5 +119,33 @@ test.describe.serial('Pipeline E2E', () => {
     const pr = await findPR(SANDBOX_REPO, branch)
     expect(pr, `Expected an open PR from branch "${branch}"`).toBeTruthy()
     prNumber = pr!.number
+  })
+
+  test('Step 4: Vercel preview deploys successfully', async () => {
+    test.setTimeout(180_000)
+    expect(prNumber, 'prNumber must be set by Step 3').toBeTruthy()
+
+    // Get the PR's head SHA for deployment lookup
+    const pr = await findPR(SANDBOX_REPO, `feedback/issue-${issueNumber}`)
+    expect(pr).toBeTruthy()
+
+    // Poll for a successful deployment on the PR's head SHA
+    previewUrl = await waitForDeployment(SANDBOX_REPO, pr!.head_sha, 150_000)
+    expect(previewUrl).toBeTruthy()
+    expect(previewUrl).toContain('https://')
+  })
+
+  test('Step 5: Preview contains the expected change', async ({ page }) => {
+    test.setTimeout(30_000)
+    expect(previewUrl, 'previewUrl must be set by Step 4').toBeTruthy()
+
+    // Navigate to the preview URL
+    await page.goto(previewUrl)
+    await page.waitForLoadState('networkidle')
+
+    // Verify the footer element exists with correct text
+    const footer = page.locator('#qa-test-footer')
+    await expect(footer).toBeVisible({ timeout: 10_000 })
+    await expect(footer).toContainText('Built with feedback-chat')
   })
 })
