@@ -1,6 +1,7 @@
 import { createSupabaseClient } from './supabase.js'
 import { runManagedJob } from './worker.js'
 import { runSetupJob } from './setup-worker.js'
+import { getInstallationToken, isGitHubAppConfigured } from './github-app.js'
 type Supabase = ReturnType<typeof createSupabaseClient>
 
 const POLL_INTERVAL_MS = 5_000
@@ -33,12 +34,19 @@ async function fetchCredentials(supabase: Supabase, projectId: string) {
 async function fetchGithubConfig(supabase: Supabase, projectId: string) {
   const { data: project } = await supabase
     .from('projects')
-    .select('github_repo')
+    .select('github_repo, github_installation_id')
     .eq('id', projectId)
     .single()
 
   if (!project) throw new Error(`Project ${projectId} not found`)
 
+  // For GitHub App projects, use an installation token
+  if (project.github_installation_id && isGitHubAppConfigured()) {
+    const token = await getInstallationToken(project.github_installation_id)
+    return { token, repo: project.github_repo }
+  }
+
+  // Fallback: use GITHUB_TOKEN env var (legacy PAT-based projects)
   const token = process.env.GITHUB_TOKEN
   if (!token) throw new Error('GITHUB_TOKEN must be set on the worker')
 
