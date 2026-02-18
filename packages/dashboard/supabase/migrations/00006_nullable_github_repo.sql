@@ -1,0 +1,2 @@
+ALTER TABLE projects ALTER COLUMN github_repo DROP NOT NULL;
+ALTER TABLE projects ALTER COLUMN github_repo SET DEFAULT '';
