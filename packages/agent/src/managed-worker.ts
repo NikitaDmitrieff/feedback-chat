@@ -6,7 +6,49 @@ import { initCredentials, ensureValidToken } from './oauth.js'
 type Supabase = ReturnType<typeof createSupabaseClient>
 
 const POLL_INTERVAL_MS = 5_000
+const STALE_THRESHOLD_MINUTES = 30
+const MAX_ATTEMPTS = 3
+const MAX_BACKOFF_MS = 60_000
 const WORKER_ID = `worker-${process.pid}-${Date.now()}`
+
+async function reapStaleJobs(supabase: Supabase) {
+  const cutoff = new Date(Date.now() - STALE_THRESHOLD_MINUTES * 60_000).toISOString()
+
+  const { data: staleJobs } = await supabase
+    .from('job_queue')
+    .select('id, attempt_count')
+    .eq('status', 'processing')
+    .lt('locked_at', cutoff)
+
+  if (!staleJobs?.length) return
+
+  for (const job of staleJobs) {
+    if (job.attempt_count >= MAX_ATTEMPTS) {
+      await supabase
+        .from('job_queue')
+        .update({
+          status: 'failed',
+          last_error: `Stale after ${MAX_ATTEMPTS} attempts (locked_at exceeded ${STALE_THRESHOLD_MINUTES}m)`,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', job.id)
+        .eq('status', 'processing')
+      console.log(`[${WORKER_ID}] Reaped stale job ${job.id} → failed (exhausted)`)
+    } else {
+      await supabase
+        .from('job_queue')
+        .update({
+          status: 'pending',
+          worker_id: null,
+          locked_at: null,
+          last_error: `Reset by reaper (attempt ${job.attempt_count}/${MAX_ATTEMPTS})`,
+        })
+        .eq('id', job.id)
+        .eq('status', 'processing')
+      console.log(`[${WORKER_ID}] Reaped stale job ${job.id} → pending (attempt ${job.attempt_count}/${MAX_ATTEMPTS})`)
+    }
+  }
+}
 
 async function pollForJobs(supabase: Supabase) {
   const { data: job, error } = await supabase.rpc('claim_next_job', {
@@ -82,6 +124,7 @@ async function processJob(supabase: Supabase, job: {
   id: string
   project_id: string
   job_type?: string
+  attempt_count?: number
   github_issue_number: number
   issue_title: string
   issue_body: string
@@ -144,11 +187,48 @@ async function processJob(supabase: Supabase, job: {
       .update({ status: 'done', completed_at: new Date().toISOString() })
       .eq('id', job.id)
   } catch (err) {
-    console.error(`[${WORKER_ID}] Job ${job.id} failed:`, err)
-    await supabase
-      .from('job_queue')
-      .update({ status: 'failed', completed_at: new Date().toISOString() })
-      .eq('id', job.id)
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`[${WORKER_ID}] Job ${job.id} failed:`, message)
+
+    const isOAuthError = /authentication_error|invalid_grant|\b401\b|OAuth/i.test(message)
+
+    try {
+      if (isOAuthError) {
+        // OAuth errors are permanent — no retry
+        await supabase
+          .from('job_queue')
+          .update({
+            status: 'failed',
+            last_error: `OAuth error (no retry): ${message}`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', job.id)
+      } else if ((job.attempt_count ?? 0) + 1 < MAX_ATTEMPTS) {
+        // Retryable — reset to pending
+        await supabase
+          .from('job_queue')
+          .update({
+            status: 'pending',
+            worker_id: null,
+            locked_at: null,
+            last_error: message,
+          })
+          .eq('id', job.id)
+        console.log(`[${WORKER_ID}] Job ${job.id} reset to pending for retry`)
+      } else {
+        // Exhausted retries
+        await supabase
+          .from('job_queue')
+          .update({
+            status: 'failed',
+            last_error: `Failed after ${MAX_ATTEMPTS} attempts: ${message}`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', job.id)
+      }
+    } catch (updateErr) {
+      console.error(`[${WORKER_ID}] Failed to update job ${job.id} status:`, updateErr)
+    }
   }
 }
 
@@ -161,15 +241,32 @@ async function main() {
     await ensureValidToken()
   }
 
-  while (true) {
-    const job = await pollForJobs(supabase)
+  let consecutiveErrors = 0
 
-    if (job) {
-      // Refresh OAuth token before each job — access tokens expire after ~8h
-      await ensureValidToken()
-      await processJob(supabase, job)
-    } else {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+  while (true) {
+    try {
+      await reapStaleJobs(supabase)
+
+      const job = await pollForJobs(supabase)
+
+      // Successful DB round-trip — reset backoff
+      consecutiveErrors = 0
+
+      if (job) {
+        // Refresh OAuth token before each job — access tokens expire after ~8h
+        await ensureValidToken()
+        await processJob(supabase, job)
+      } else {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+      }
+    } catch (err) {
+      consecutiveErrors++
+      const backoff = Math.min(POLL_INTERVAL_MS * 2 ** (consecutiveErrors - 1), MAX_BACKOFF_MS)
+      console.error(
+        `[${WORKER_ID}] Poll loop error (${consecutiveErrors} consecutive, retrying in ${backoff}ms):`,
+        err instanceof Error ? err.message : err,
+      )
+      await new Promise((r) => setTimeout(r, backoff))
     }
   }
 }
