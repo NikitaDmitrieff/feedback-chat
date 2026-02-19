@@ -188,12 +188,9 @@ export function SetupWizard({ projectId, githubRepo, installationId, initialStat
                 View Pull Request
               </a>
               <div className="mt-4 rounded-lg bg-white/[0.04] p-3">
-                <p className="text-xs font-medium text-fg mb-1">After merging:</p>
-                <ol className="text-xs text-muted space-y-1 list-decimal list-inside">
-                  <li>Add <code className="text-fg">ANTHROPIC_API_KEY</code> to <code className="text-fg">.env.local</code></li>
-                  <li>Add <code className="text-fg">FEEDBACK_PASSWORD</code> to <code className="text-fg">.env.local</code></li>
-                  <li>Restart your dev server</li>
-                </ol>
+                <p className="text-xs font-medium text-fg mb-2">After merging, add to <code className="text-fg">.env.local</code>:</p>
+                <pre className="select-all rounded-md bg-black/30 px-3 py-2 text-xs text-fg/80 leading-relaxed"><code>{`ANTHROPIC_API_KEY=\nFEEDBACK_PASSWORD=easy`}</code></pre>
+                <p className="mt-2 text-[11px] text-muted">Then restart your dev server.</p>
               </div>
             </>
           )}
