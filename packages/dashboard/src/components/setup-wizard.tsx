@@ -82,18 +82,18 @@ export function SetupWizard({ projectId, githubRepo, installationId, initialStat
   if (!installationId && status === 'pending') {
     return (
       <div className="mb-8">
-        <div className="glass-card p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Zap className="h-5 w-5 text-accent" />
-            <h2 className="text-sm font-medium text-fg">Quick Setup</h2>
+        <div className="glass-card flex flex-col items-center px-8 py-10 text-center">
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-accent/10">
+            <Github className="h-5 w-5 text-accent" />
           </div>
-          <p className="text-xs text-muted mb-4">
-            Connect your GitHub repository to automatically install the feedback widget.
+          <h2 className="text-sm font-medium text-fg">Connect GitHub</h2>
+          <p className="mt-1.5 max-w-xs text-xs text-muted">
+            Link your repository to auto-install the feedback widget.
             We&apos;ll create a PR with everything configured.
           </p>
           <button
             onClick={handleConnect}
-            className="flex h-10 items-center gap-2 rounded-xl bg-white px-5 text-sm font-medium text-bg transition-colors hover:bg-white/90"
+            className="mt-5 flex h-10 items-center gap-2 rounded-xl bg-white px-6 text-sm font-medium text-bg transition-colors hover:bg-white/90"
           >
             <Github className="h-4 w-4" />
             Connect GitHub

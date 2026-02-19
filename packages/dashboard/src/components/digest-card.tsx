@@ -28,6 +28,8 @@ export function DigestCard({ projectId }: { projectId: string }) {
     fetchDigest()
   }, [fetchDigest])
 
+  if (!loading && (!data || data.stats.total === 0)) return null
+
   return (
     <div className="glass-card p-5">
       <div className="flex items-center justify-between">

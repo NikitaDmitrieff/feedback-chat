@@ -5,8 +5,8 @@ import type { SetupStatus } from '@/lib/types'
 import { DigestCard } from '@/components/digest-card'
 import { StatsBar } from '@/components/stats-bar'
 import { RunsTable } from '@/components/runs-table'
-import Link from 'next/link'
-import { ArrowLeft, Github } from 'lucide-react'
+import { Github } from 'lucide-react'
+import { DeleteProjectButton } from '@/components/delete-project-button'
 
 export default async function ProjectPage({
   params,
@@ -41,24 +41,18 @@ export default async function ProjectPage({
 
   return (
     <div className="mx-auto max-w-5xl px-6 pt-10 pb-16">
-      {/* Breadcrumb */}
-      <Link
-        href="/projects"
-        className="mb-6 inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-fg"
-      >
-        <ArrowLeft className="h-3 w-3" />
-        All projects
-      </Link>
-
       {/* Project header */}
-      <div className="mb-8">
-        <h1 className="text-lg font-medium text-fg">{project.name}</h1>
-        {project.github_repo && (
-          <div className="mt-1.5 flex items-center gap-2 text-xs text-muted">
-            <Github className="h-3 w-3" />
-            {project.github_repo}
-          </div>
-        )}
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-lg font-medium text-fg">{project.name}</h1>
+          {project.github_repo && (
+            <div className="mt-1.5 flex items-center gap-2 text-xs text-muted">
+              <Github className="h-3 w-3" />
+              {project.github_repo}
+            </div>
+          )}
+        </div>
+        <DeleteProjectButton projectId={project.id} />
       </div>
 
       {/* Stats bar */}

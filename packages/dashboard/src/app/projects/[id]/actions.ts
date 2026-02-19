@@ -1,6 +1,20 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+
+export async function deleteProject(projectId: string) {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', projectId)
+
+  if (error) throw new Error('Failed to delete project')
+
+  redirect('/projects')
+}
 
 export async function markAllStepsDone(projectId: string) {
   const supabase = await createClient()
