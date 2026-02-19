@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { SidebarWrapper } from '@/components/sidebar-wrapper'
 import { MainContent } from '@/components/main-content'
+import { FeedbackButton } from '@/components/FeedbackButton'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen font-[family-name:var(--font-inter)] antialiased">
         <SidebarWrapper />
         <MainContent>{children}</MainContent>
+        <FeedbackButton />
       </body>
     </html>
   )

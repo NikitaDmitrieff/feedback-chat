@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../node_modules/@nikitadmitrieff/feedback-chat/dist/**/*.js";
 
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
