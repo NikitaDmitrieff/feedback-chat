@@ -1,0 +1,3 @@
+{
+  "buildCommand": "cd ../widget && npm run build && cd ../dashboard && next build"
+}
