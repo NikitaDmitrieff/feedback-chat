@@ -14,10 +14,14 @@ import { TooltipProvider } from './ui/tooltip'
 import type { FeedbackPanelProps } from './types'
 
 const STORAGE_KEY = 'feedback_password'
+const NAME_KEY = 'feedback_tester_name'
 
 export function FeedbackPanel({ isOpen, onToggle, apiUrl = '/api/feedback/chat' }: FeedbackPanelProps & { apiUrl?: string }) {
   const [authenticated, setAuthenticated] = useState(
     () => typeof window !== 'undefined' && sessionStorage.getItem(STORAGE_KEY) !== null
+  )
+  const [testerName, setTesterName] = useState(
+    () => typeof window !== 'undefined' ? localStorage.getItem(NAME_KEY) : null
   )
   const [pendingMessage, setPendingMessage] = useState('')
   const [triggerInput, setTriggerInput] = useState('')
@@ -121,14 +125,19 @@ export function FeedbackPanel({ isOpen, onToggle, apiUrl = '/api/feedback/chat' 
         }`}
       >
         <div className="flex h-full w-[400px] flex-col text-foreground">
-          {authenticated ? (
+          {authenticated && testerName ? (
             <ChatContent
               isOpen={isOpen}
               onClose={onToggle}
               pendingMessage={pendingMessage}
               onPendingMessageSent={clearPendingMessage}
               apiUrl={apiUrl}
+              testerName={testerName}
             />
+          ) : authenticated && !testerName ? (
+            <div className="feedback-panel-glass flex h-full flex-col overflow-hidden">
+              <NameGate onName={setTesterName} onClose={onToggle} />
+            </div>
           ) : (
             <div className="feedback-panel-glass flex h-full flex-col overflow-hidden">
               <PasswordGate onAuth={() => setAuthenticated(true)} onClose={onToggle} apiUrl={apiUrl} />
@@ -146,17 +155,22 @@ function ChatContent({
   pendingMessage,
   onPendingMessageSent,
   apiUrl,
+  testerName,
 }: {
   isOpen: boolean
   onClose: () => void
   pendingMessage: string
   onPendingMessageSent: () => void
   apiUrl: string
+  testerName: string
 }) {
   const runtime = useChatRuntime({
     transport: new DefaultChatTransport({
       api: apiUrl,
-      body: () => ({ password: sessionStorage.getItem(STORAGE_KEY) || '' }),
+      body: () => ({
+        password: sessionStorage.getItem(STORAGE_KEY) || '',
+        testerName,
+      }),
     }),
   })
 
@@ -325,6 +339,55 @@ function PasswordGate({ onAuth, onClose, apiUrl }: { onAuth: () => void; onClose
               <ArrowRight className="h-3.5 w-3.5" />
             </>
           )}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+function NameGate({ onName, onClose }: { onName: (name: string) => void; onClose: () => void }) {
+  const [name, setName] = useState('')
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    localStorage.setItem(NAME_KEY, trimmed)
+    onName(trimmed)
+  }
+
+  return (
+    <div className="relative flex h-full flex-col items-center justify-center px-8">
+      <button
+        onClick={onClose}
+        className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        aria-label="Close"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+        <Lightbulb className="h-6 w-6 text-muted-foreground" />
+      </div>
+      <p className="mb-8 text-center text-sm text-muted-foreground">
+        What should we call you?
+      </p>
+      <form onSubmit={handleSubmit} className="w-full space-y-3">
+        <input
+          type="text"
+          autoComplete="name"
+          placeholder="Your name"
+          aria-label="Your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="h-10 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+        />
+        <button
+          type="submit"
+          disabled={!name.trim()}
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+        >
+          Continue
+          <ArrowRight className="h-3.5 w-3.5" />
         </button>
       </form>
     </div>
