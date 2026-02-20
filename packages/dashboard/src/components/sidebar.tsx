@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FolderKanban, MessageSquare, Lightbulb, LogOut } from 'lucide-react'
+import { FolderKanban, LayoutDashboard, MessageSquare, Lightbulb, Workflow, LogOut } from 'lucide-react'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -51,6 +51,23 @@ export function Sidebar() {
         {expanded && <span className="truncate text-xs">Projects</span>}
       </Link>
 
+      {/* Project overview (contextual — only when inside a project) */}
+      {projectId && (
+        <Link
+          href={`/projects/${projectId}`}
+          className={`flex items-center rounded-[16px] transition-colors ${
+            pathname === `/projects/${projectId}`
+              ? 'bg-white/[0.08] text-fg'
+              : 'text-muted hover:bg-white/[0.06] hover:text-fg'
+          } ${expanded ? 'gap-2.5 px-2 py-2' : 'justify-center p-1.5'}`}
+        >
+          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center">
+            <LayoutDashboard className="h-[15px] w-[15px]" />
+          </div>
+          {expanded && <span className="truncate text-xs">Overview</span>}
+        </Link>
+      )}
+
       {/* Feedback (contextual — only when inside a project) */}
       {projectId && (
         <Link
@@ -82,6 +99,23 @@ export function Sidebar() {
             <Lightbulb className="h-[15px] w-[15px]" />
           </div>
           {expanded && <span className="truncate text-xs">Proposals</span>}
+        </Link>
+      )}
+
+      {/* Pipeline (contextual — only when inside a project) */}
+      {projectId && (
+        <Link
+          href={`/projects/${projectId}/pipeline`}
+          className={`flex items-center rounded-[16px] transition-colors ${
+            pathname.includes('/pipeline')
+              ? 'bg-white/[0.08] text-fg'
+              : 'text-muted hover:bg-white/[0.06] hover:text-fg'
+          } ${expanded ? 'gap-2.5 px-2 py-2' : 'justify-center p-1.5'}`}
+        >
+          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center">
+            <Workflow className="h-[15px] w-[15px]" />
+          </div>
+          {expanded && <span className="truncate text-xs">Pipeline</span>}
         </Link>
       )}
 

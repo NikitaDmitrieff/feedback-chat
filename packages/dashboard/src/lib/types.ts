@@ -135,6 +135,7 @@ export type Proposal = {
   user_notes: string | null
   reject_reason: string | null
   github_issue_number: number | null
+  branch_name: string | null
   scores: {
     impact?: number
     feasibility?: number

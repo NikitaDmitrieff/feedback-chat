@@ -1,7 +1,8 @@
-import { execSync, execFileSync } from 'node:child_process'
+import { execSync, execFileSync, spawn } from 'node:child_process'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { createInterface } from 'node:readline'
 import { parseIssueBody } from './parse-issue.js'
 import {
   commentOnIssue,
@@ -78,26 +79,83 @@ async function claudeEnv(): Promise<NodeJS.ProcessEnv> {
   return { ...envWithoutClaude, CI: 'true' }
 }
 
-async function runClaude(prompt: string, workDir: string, issueNumber: number, timeoutMs: number): Promise<void> {
-  const env = await claudeEnv()
-  console.log(`[job-${issueNumber}] Running Claude Code CLI...`)
-  try {
-    execFileSync(
-      'claude',
-      ['--dangerously-skip-permissions', '-p', prompt],
-      {
-        cwd: workDir,
-        timeout: timeoutMs,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env,
-      }
-    )
-  } catch (err: unknown) {
-    const e = err as { stderr?: string; stdout?: string; status?: number }
-    const details = `Exit code: ${e.status}\nSTDERR: ${(e.stderr || '').slice(-2000)}\nSTDOUT: ${(e.stdout || '').slice(-2000)}`
-    throw new Error(`Command failed: claude --dangerously-skip-permissions -p ...\n${details}`)
+function summarizeToolInput(tool: string, input: Record<string, unknown>): string {
+  switch (tool) {
+    case 'Read':
+      return `Reading ${input.file_path ?? 'file'}`
+    case 'Edit':
+      return `Editing ${input.file_path ?? 'file'}`
+    case 'Write':
+      return `Creating ${input.file_path ?? 'file'}`
+    case 'Bash':
+      return `Running: ${String(input.command ?? '').slice(0, 120)}`
+    case 'Glob':
+      return `Searching files: ${input.pattern ?? ''}`
+    case 'Grep':
+      return `Searching for: ${input.pattern ?? ''}`
+    default:
+      return `Using tool: ${tool}`
   }
+}
+
+async function runClaude(prompt: string, workDir: string, issueNumber: number, timeoutMs: number, logger?: DbLogger): Promise<void> {
+  const env = await claudeEnv()
+  console.log(`[job-${issueNumber}] Running Claude Code CLI (stream-json)...`)
+  await logger?.event('text', 'Starting Claude CLI...')
+
+  return new Promise<void>((resolve, reject) => {
+    const proc = spawn(
+      'claude',
+      ['--dangerously-skip-permissions', '--output-format', 'stream-json', '-p', prompt],
+      { cwd: workDir, env, stdio: ['pipe', 'pipe', 'pipe'] }
+    )
+
+    const timer = setTimeout(() => {
+      proc.kill('SIGTERM')
+      reject(new Error(`Claude CLI timed out after ${Math.round(timeoutMs / 60000)} minutes`))
+    }, timeoutMs)
+
+    let stderr = ''
+    proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
+
+    const rl = createInterface({ input: proc.stdout })
+    rl.on('line', (line) => {
+      try {
+        const evt = JSON.parse(line)
+        // Tool use events
+        if (evt.type === 'assistant' && evt.message?.content) {
+          for (const block of evt.message.content) {
+            if (block.type === 'tool_use') {
+              const summary = summarizeToolInput(block.name, block.input ?? {})
+              logger?.event('tool_use', summary, { tool: block.name, input: block.input })
+            }
+          }
+        }
+        // Tool result events
+        if (evt.type === 'result' && evt.subtype === 'tool_result') {
+          // Minimal logging — we mostly care about tool_use, not every result
+        }
+      } catch {
+        // Non-JSON line, ignore
+      }
+    })
+
+    proc.on('close', (code) => {
+      clearTimeout(timer)
+      if (code === 0) {
+        resolve()
+      } else {
+        reject(new Error(
+          `Claude CLI exited with code ${code}\nSTDERR: ${stderr.slice(-2000)}`
+        ))
+      }
+    })
+
+    proc.on('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+  })
 }
 
 function getChangedFiles(workDir: string): string[] {
@@ -159,22 +217,35 @@ function cleanup(workDir: string) {
   }
 }
 
-export async function runJob(input: JobInput): Promise<{ success: boolean }> {
+function extractBranchName(issueBody: string): string | null {
+  const match = issueBody.match(/^Branch:\s*(.+)$/m)
+  return match ? match[1].trim() : null
+}
+
+export async function runJob(input: JobInput, logger?: DbLogger): Promise<{ success: boolean }> {
   const config = loadConfig()
   const { issueNumber, issueTitle, issueBody } = input
   const workDir = `/tmp/job-${issueNumber}`
   const jobStart = Date.now()
 
   console.log(`[job-${issueNumber}] Starting`)
+  await logger?.event('text', `Job claimed — starting implementation for issue #${issueNumber}`)
 
   // 1. Parse issue
   let parsed
   try {
     parsed = parseIssueBody(issueBody)
   } catch (err) {
+    await logger?.event('error', `Could not parse issue body: ${err}`)
     await commentOnIssue(issueNumber, `Agent could not parse issue body: ${err}`)
     await labelIssue(issueNumber, ['agent-failed'])
     return { success: false }
+  }
+
+  // Extract custom branch name from issue body metadata
+  const customBranch = extractBranchName(issueBody)
+  if (customBranch) {
+    await logger?.event('text', `Custom branch requested: ${customBranch}`)
   }
 
   // Mark as in-progress
@@ -185,12 +256,17 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
   const repo = process.env.GITHUB_REPO
   const token = process.env.GITHUB_TOKEN
   try {
-    cleanup(workDir) // Clean any leftover from a previous failed run
+    cleanup(workDir)
+    await logger?.event('text', `Cloning repo ${repo}...`)
     run(
       `git clone --depth=1 https://x-access-token:${token}@github.com/${repo}.git ${workDir}`,
       '/tmp'
     )
+    await logger?.event('text', 'Clone complete')
+
+    await logger?.event('text', `Installing dependencies (${config.installCommand})...`)
     run(config.installCommand, workDir)
+    await logger?.event('text', 'Dependencies installed')
 
     // Write .env.local for build (forward env vars matching configured patterns)
     const envKeys = Object.keys(process.env).filter(
@@ -199,9 +275,11 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
     if (envKeys.length > 0) {
       const envContent = envKeys.map((k) => `${k}=${process.env[k]}`).join('\n')
       writeFileSync(`${workDir}/.env.local`, envContent + '\n')
+      await logger?.event('text', `Wrote .env.local (${envKeys.length} vars)`)
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
+    await logger?.event('error', `Clone/install failed: ${msg.slice(0, 300)}`)
     await fail(issueNumber, `Clone or ${config.installCommand} failed`, msg, workDir)
     return { success: false }
   }
@@ -209,11 +287,14 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
   // 2b. Pre-lint: catch pre-existing errors before Claude touches anything
   let preLintErrors = ''
   try {
+    await logger?.event('text', 'Running pre-lint check...')
     run(config.lintCommand, workDir)
+    await logger?.event('text', 'Pre-lint: clean')
     console.log(`[job-${issueNumber}] Pre-lint clean`)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     preLintErrors = msg
+    await logger?.event('text', 'Pre-lint: existing errors found, will include in prompt')
     console.log(`[job-${issueNumber}] Pre-existing lint errors found, will include in prompt`)
   }
 
@@ -226,6 +307,7 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
     )
     if (modComment) {
       retryFeedback = modComment.body
+      await logger?.event('text', 'Retry detected — appending modification feedback')
       console.log(`[job-${issueNumber}] Retry detected — appending modification feedback`)
     }
   } catch (err) {
@@ -248,11 +330,14 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
 
   try {
     const initialTimeout = Math.min(config.claudeTimeoutMs, config.jobBudgetMs - (Date.now() - jobStart))
+    await logger?.event('text', `Preparing Claude CLI prompt (${prompt.length} chars)`)
     console.log(`[job-${issueNumber}] Running Claude Code CLI with prompt: ${prompt.slice(0, 200)}...`)
-    await runClaude(prompt, workDir, issueNumber, initialTimeout)
+    await runClaude(prompt, workDir, issueNumber, initialTimeout, logger)
+    await logger?.event('text', 'Claude CLI finished')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     const isTimeout = msg.includes('TIMEOUT') || msg.includes('timed out')
+    await logger?.event('error', isTimeout ? 'Claude CLI timed out' : `Claude CLI failed: ${msg.slice(0, 300)}`)
     await fail(
       issueNumber,
       isTimeout ? `Claude Code CLI timed out (${Math.round(config.claudeTimeoutMs / 60_000)} min limit)` : 'Claude Code CLI failed',
@@ -262,21 +347,35 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
     return { success: false }
   }
 
-  // 4. Validate with escalating fix retry loop
+  // Log changed files
+  const changedFiles = getChangedFiles(workDir)
+  await logger?.event('text', `Changed files: ${changedFiles.length} (${changedFiles.slice(0, 5).join(', ')}${changedFiles.length > 5 ? '...' : ''})`)
+
+  // 5. Validate with escalating fix retry loop
+  await logger?.event('text', `Running build validation (${config.buildCommand})...`)
   let result = validate(workDir, issueNumber, config.buildCommand)
+
+  if (result.success) {
+    await logger?.event('text', 'Build passed')
+    await logger?.event('text', 'Lint passed')
+  }
 
   for (let attempt = 1; attempt <= MAX_FIX_ATTEMPTS && !result.success; attempt++) {
     const elapsed = Date.now() - jobStart
     const remaining = config.jobBudgetMs - elapsed
 
     if (remaining < MIN_RETRY_BUDGET_MS) {
+      await logger?.event('text', `Budget exhausted (${Math.round(elapsed / 1000)}s), cannot retry`)
       console.log(`[job-${issueNumber}] Budget exhausted (${Math.round(elapsed / 1000)}s elapsed), cannot retry`)
       break
     }
 
+    await logger?.event('text', `${result.stage} failed — fix attempt ${attempt}/${MAX_FIX_ATTEMPTS}`)
+
     // Level 1: Try eslint --fix for lint errors (free, instant)
     if (result.stage === 'lint' && result.changedFiles.length > 0) {
       await commentOnIssue(issueNumber, `Auto-fix ${attempt}/${MAX_FIX_ATTEMPTS}`)
+      await logger?.event('text', 'Attempting eslint --fix...')
       console.log(`[job-${issueNumber}] Attempting eslint --fix (attempt ${attempt})...`)
       try {
         run(`npx eslint --fix ${result.changedFiles.join(' ')}`, workDir)
@@ -284,25 +383,33 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
         // eslint --fix may exit non-zero even when it fixes some issues
       }
       result = validate(workDir, issueNumber, config.buildCommand)
-      if (result.success) break
+      if (result.success) {
+        await logger?.event('text', 'Auto-fix resolved the issue')
+        break
+      }
     }
 
     // Level 2: Ask Claude to fix the errors
     const fixPrompt = `The ${result.stage} step failed with the following errors. Fix them without changing any unrelated code:\n\n${result.errorOutput}`
     await commentOnIssue(issueNumber, `Retry ${attempt}/${MAX_FIX_ATTEMPTS} (${result.stage})`)
+    await logger?.event('text', `Asking Claude to fix ${result.stage} errors...`)
 
     try {
       const claudeTimeout = Math.min(remaining - 60_000, config.claudeTimeoutMs)
-      await runClaude(fixPrompt, workDir, issueNumber, claudeTimeout)
+      await runClaude(fixPrompt, workDir, issueNumber, claudeTimeout, logger)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       console.log(`[job-${issueNumber}] Claude fix attempt ${attempt} failed: ${msg.slice(0, 200)}`)
     }
 
     result = validate(workDir, issueNumber, config.buildCommand)
+    if (result.success) {
+      await logger?.event('text', `Fix attempt ${attempt} succeeded`)
+    }
   }
 
   if (!result.success) {
+    await logger?.event('error', `${result.stage} still failing after ${MAX_FIX_ATTEMPTS} fix attempts`)
     await fail(
       issueNumber,
       `${result.stage === 'build' ? 'Build' : 'Lint'} still failing after ${MAX_FIX_ATTEMPTS} fix attempts`,
@@ -313,8 +420,9 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
   }
 
   // 5. Branch + PR
-  const branch = `feedback/issue-${issueNumber}`
+  const branch = customBranch || `feedback/issue-${issueNumber}`
   try {
+    await logger?.event('text', `Creating branch: ${branch}`)
     run(`git checkout -b ${branch}`, workDir)
     run('git add -A', workDir)
     execFileSync(
@@ -322,9 +430,12 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
       ['commit', '-m', `feat: ${issueTitle} (auto-implemented from #${issueNumber})`],
       { cwd: workDir, timeout: STEP_TIMEOUT_MS, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
     )
+    await logger?.event('text', `Pushing to origin/${branch}...`)
     run(`git push -f origin ${branch}`, workDir)
+    await logger?.event('text', 'Push complete')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
+    await logger?.event('error', `Git branch/push failed: ${msg.slice(0, 300)}`)
     await fail(issueNumber, 'Git branch/push failed', msg, workDir)
     return { success: false }
   }
@@ -333,17 +444,21 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
   try {
     const existing = await findOpenPR(issueNumber)
     if (!existing) {
+      await logger?.event('text', 'Creating pull request...')
       const pr = await createPR(
         issueNumber,
         `feat: ${issueTitle} (auto-implemented from #${issueNumber})`,
         `Closes #${issueNumber}\n\nAuto-implemented by the feedback agent.`
       )
+      await logger?.event('text', `PR created: #${pr.number}`)
       console.log(`[job-${issueNumber}] Created PR #${pr.number}: ${pr.html_url}`)
     } else {
+      await logger?.event('text', `PR already exists: #${existing.number}`)
       console.log(`[job-${issueNumber}] PR already exists: #${existing.number}`)
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
+    await logger?.event('error', `PR creation failed: ${msg.slice(0, 300)}`)
     await fail(issueNumber, 'PR creation failed', msg, workDir)
     return { success: false }
   }
@@ -357,6 +472,7 @@ export async function runJob(input: JobInput): Promise<{ success: boolean }> {
     'Preview deploying — Vercel will build the PR branch. Check the tracker for status.'
   )
   cleanup(workDir)
+  await logger?.event('text', 'Done — PR created, awaiting Vercel preview')
   console.log(`[job-${issueNumber}] Done — PR created, awaiting preview`)
   return { success: true }
 }
@@ -396,7 +512,7 @@ export async function runManagedJob(input: ManagedJobInput): Promise<void> {
   await logger.log(`Starting job for issue #${input.issueNumber}`)
 
   try {
-    const result = await runJob(input)
+    const result = await runJob(input, logger)
 
     if (!result.success) {
       await input.supabase

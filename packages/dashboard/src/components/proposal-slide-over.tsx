@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, Edit3, Loader2, X, ExternalLink } from 'lucide-react'
+import { Check, Edit3, Loader2, X, ExternalLink, GitBranch } from 'lucide-react'
 import type { Proposal } from '@/lib/types'
+import { LiveLogTail } from './live-log-tail'
 
 type Props = {
   proposal: Proposal
@@ -10,6 +11,8 @@ type Props = {
   githubRepo: string | null
   onClose: () => void
   onUpdate: (updated: Proposal) => void
+  /** If the proposal has an active pipeline run, pass its ID for live log tailing */
+  activeRunId?: string | null
 }
 
 const PRIORITY_LABEL: Record<string, { label: string; color: string }> = {
@@ -25,13 +28,24 @@ const SCORE_LABELS = [
   { key: 'alignment' as const, label: 'Alignment' },
 ]
 
-export function ProposalSlideOver({ proposal, projectId, githubRepo, onClose, onUpdate }: Props) {
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40)
+}
+
+export function ProposalSlideOver({ proposal, projectId, githubRepo, onClose, onUpdate, activeRunId }: Props) {
   const [editing, setEditing] = useState(false)
   const [editedSpec, setEditedSpec] = useState(proposal.spec)
   const [userNotes, setUserNotes] = useState(proposal.user_notes || '')
   const [rejectReason, setRejectReason] = useState('')
   const [showReject, setShowReject] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [branchName, setBranchName] = useState(
+    proposal.branch_name || `proposals/${slugify(proposal.title)}`
+  )
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -52,6 +66,7 @@ export function ProposalSlideOver({ proposal, projectId, githubRepo, onClose, on
           action,
           userNotes: action === 'approve' ? userNotes || undefined : undefined,
           modifiedSpec: action === 'approve' && editing ? editedSpec : undefined,
+          branchName: action === 'approve' ? branchName || undefined : undefined,
           rejectReason: action === 'reject' ? rejectReason || undefined : undefined,
         }),
       })
@@ -162,6 +177,26 @@ export function ProposalSlideOver({ proposal, projectId, githubRepo, onClose, on
             )}
           </div>
 
+          {/* Branch picker (draft only) */}
+          {proposal.status === 'draft' && (
+            <div className="mb-5">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">
+                Branch
+              </h3>
+              <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2.5">
+                <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted" />
+                <input
+                  type="text"
+                  value={branchName}
+                  onChange={e => setBranchName(e.target.value)}
+                  placeholder="proposals/feature-name"
+                  className="flex-1 bg-transparent text-sm text-fg placeholder:text-muted focus:outline-none"
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-dim">Branch where the agent will push changes</p>
+            </div>
+          )}
+
           {/* GitHub issue link */}
           {proposal.github_issue_number && githubRepo && (
             <div className="mb-5">
@@ -177,6 +212,16 @@ export function ProposalSlideOver({ proposal, projectId, githubRepo, onClose, on
                 Issue #{proposal.github_issue_number}
                 <ExternalLink className="ml-auto h-3 w-3 text-muted" />
               </a>
+            </div>
+          )}
+
+          {/* Live progress tracker (approved proposals with active runs) */}
+          {proposal.status === 'approved' && activeRunId && (
+            <div className="mb-5">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">
+                Agent Progress
+              </h3>
+              <LiveLogTail projectId={projectId} runId={activeRunId} />
             </div>
           )}
 
