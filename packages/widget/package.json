@@ -15,10 +15,7 @@
       "import": "./dist/server/index.js",
       "default": "./dist/server/index.js"
     },
-    "./styles.css": {
-      "import": "./dist/styles.css",
-      "default": "./dist/styles.css"
-    }
+    "./styles.css": "./dist/styles.css"
   },
   "bin": {
     "feedback-chat": "./dist/cli/init.js",
