@@ -26,7 +26,7 @@ export default async function RunDetailPage({
 
   const { data: run } = await supabase
     .from('pipeline_runs')
-    .select('id, github_issue_number, github_pr_number, stage, triggered_by, started_at, completed_at, result')
+    .select('id, github_issue_number, github_pr_number, stage, triggered_by, started_at, completed_at, result, failure_category, failure_analysis, improvement_job_id')
     .eq('id', runId)
     .eq('project_id', projectId)
     .single()
@@ -194,6 +194,30 @@ export default async function RunDetailPage({
               >
                 View conversation
               </a>
+            </div>
+          )}
+
+          {/* Failure Analysis */}
+          {run.failure_category && (
+            <div className="glass-card p-5">
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted">Failure Analysis</h3>
+              <div className="mb-2">
+                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                  run.failure_category === 'consumer_error' ? 'bg-warning/20 text-warning' :
+                  run.failure_category === 'transient' ? 'bg-muted/20 text-muted' :
+                  'bg-danger/20 text-danger'
+                }`}>
+                  {run.failure_category.replace('_', ' ')}
+                </span>
+              </div>
+              {run.failure_analysis && (
+                <p className="text-xs text-muted leading-relaxed">{run.failure_analysis}</p>
+              )}
+              {run.improvement_job_id && (
+                <p className="mt-2 text-xs text-accent">
+                  Improvement job spawned
+                </p>
+              )}
             </div>
           )}
 
