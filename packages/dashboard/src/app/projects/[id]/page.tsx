@@ -1,28 +1,24 @@
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { SetupSection } from '@/components/setup-section'
-import type { SetupStatus } from '@/lib/types'
 import { DigestCard } from '@/components/digest-card'
 import { StatsBar } from '@/components/stats-bar'
 import { RunsTable } from '@/components/runs-table'
-import { Github } from 'lucide-react'
+import { Github, Sparkles } from 'lucide-react'
 import { DeleteProjectButton } from '@/components/delete-project-button'
 import { ProposalsCard } from '@/components/proposals-card'
 
 export default async function ProjectPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ apiKey?: string }>
 }) {
   const { id } = await params
-  const { apiKey } = await searchParams
   const supabase = await createClient()
 
   const { data: project } = await supabase
     .from('projects')
-    .select('id, name, github_repo, webhook_secret, created_at, setup_progress, github_installation_id, setup_status, setup_pr_url, setup_error')
+    .select('id, name, github_repo, product_context, webhook_secret, created_at, setup_progress, github_installation_id, setup_status, setup_pr_url, setup_error')
     .eq('id', id)
     .single()
 
@@ -60,11 +56,6 @@ export default async function ProjectPage({
     feedback_source: feedbackByIssue.get(run.github_issue_number) ?? null,
   }))
 
-  const hasRuns = !!runs && runs.length > 0
-
-  const agentUrl = process.env.AGENT_URL ?? ''
-  const webhookUrl = agentUrl ? `${agentUrl}/webhook/github` : ''
-
   return (
     <div className="mx-auto max-w-5xl px-6 pt-10 pb-16">
       {/* Project header */}
@@ -94,21 +85,34 @@ export default async function ProjectPage({
         <ProposalsCard projectId={project.id} />
       </div>
 
-      {/* Setup */}
-      <SetupSection
-        projectId={project.id}
-        githubRepo={project.github_repo ?? ''}
-        installationId={project.github_installation_id ?? null}
-        initialStatus={(project.setup_status ?? 'pending') as SetupStatus}
-        initialPrUrl={project.setup_pr_url ?? null}
-        initialError={project.setup_error ?? null}
-        webhookSecret={project.webhook_secret ?? ''}
-        apiKey={apiKey}
-        webhookUrl={webhookUrl}
-        agentUrl={agentUrl}
-        setupProgress={(project.setup_progress ?? {}) as Record<string, boolean>}
-        hasRuns={hasRuns}
-      />
+      {/* Settings nudge (if no product context) */}
+      {!project.product_context && (
+        <div className="mb-8 flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
+          <Sparkles className="h-4 w-4 shrink-0 text-accent" />
+          <p className="flex-1 text-xs text-muted">
+            Set up your product context to improve proposal quality.
+          </p>
+          <Link
+            href={`/projects/${id}/settings`}
+            className="shrink-0 text-[11px] font-medium text-accent hover:text-fg"
+          >
+            Go to Settings
+          </Link>
+        </div>
+      )}
+
+      {/* Setup incomplete banner */}
+      {project.setup_status !== 'complete' && project.setup_status !== 'pr_created' && (
+        <div className="mb-8 flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
+          <span className="text-xs text-muted">Setup incomplete</span>
+          <Link
+            href={`/projects/${id}/settings`}
+            className="text-[11px] font-medium text-accent hover:text-fg"
+          >
+            Go to Settings
+          </Link>
+        </div>
+      )}
 
       {/* Runs table */}
       <div className="mb-8">
