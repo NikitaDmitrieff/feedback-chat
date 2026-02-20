@@ -7,6 +7,7 @@ import { StatsBar } from '@/components/stats-bar'
 import { RunsTable } from '@/components/runs-table'
 import { Github } from 'lucide-react'
 import { DeleteProjectButton } from '@/components/delete-project-button'
+import { ProposalsCard } from '@/components/proposals-card'
 
 export default async function ProjectPage({
   params,
@@ -86,6 +87,11 @@ export default async function ProjectPage({
       {/* Feedback digest */}
       <div className="mb-8">
         <DigestCard projectId={project.id} />
+      </div>
+
+      {/* Proposals */}
+      <div className="mb-8">
+        <ProposalsCard projectId={project.id} />
       </div>
 
       {/* Setup */}
