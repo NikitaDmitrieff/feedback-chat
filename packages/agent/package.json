@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@octokit/app": "^16.1.2",
     "@supabase/supabase-js": "^2.95.3",
     "fastify": "^5.2.0"
