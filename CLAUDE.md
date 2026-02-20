@@ -49,10 +49,14 @@ packages/
   - `/api/feedback/[projectId]/testers` (list), `/testers/[testerId]` (profile + timeline)
   - `/api/runs/[projectId]` (list with feedback source enrichment), `/[runId]/logs`, `/[runId]/deployment`
   - `/api/agent/[projectId]/health`, `/api/webhook/[projectId]`, `/api/github-app/webhook`, `/api/github-app/install`
-  - `/api/proposals/[projectId]` — GET (list by status), PATCH (approve/reject with GitHub issue creation)
-- Proposals page: `/projects/[id]/proposals` — pending/active/completed sections, proposal slide-over with scores/edit/approve/reject
+  - `/api/proposals/[projectId]` — GET (list by status), POST (create user proposal), PATCH (approve/reject with GitHub issue creation)
+  - `/api/ideas/[projectId]` — GET (list with optional status filter), POST (create user idea)
+  - `/api/projects/[id]/settings` — GET/PATCH for product_context and strategic_nudges
+  - `/api/projects/[id]/context/generate` — POST, fetches GitHub repo data and generates product summary via Haiku
+- Settings page: `/projects/[id]/settings` — product context (auto-generated from GitHub + editable), strategic nudges (persistent directives), setup & config (moved from overview)
+- Proposals page: `/projects/[id]/proposals` — "Your Input" card (quick idea box + create proposal), pending/active/completed sections, proposal slide-over with scores/edit/approve/reject
 - ProposalsCard on project overview — shows pending count with "Generate" trigger button
-- Supabase tables: `feedback_sessions`, `feedback_messages`, `feedback_themes`, `proposals`, `strategy_memory` (public schema, RLS enabled)
+- Supabase tables: `feedback_sessions`, `feedback_messages`, `feedback_themes`, `proposals`, `strategy_memory`, `user_ideas` (feedback_chat schema, RLS enabled)
 - Widget persistence: `createFeedbackHandler` accepts optional `supabase` config for fire-and-forget conversation storage
 - Dashboard uses `@ai-sdk/anthropic` + `ai` (v6) + `zod` for AI classification/digest
 - Glass-card styling pattern: components use `glass-card`, `stat-card` CSS classes with Tailwind theme colors
@@ -69,8 +73,11 @@ packages/
 - **Progressive autonomy:** `autonomy_mode` column on projects (`audit` | `assist` | `automate`)
 - **Cron trigger:** GitHub Actions `.github/workflows/strategize.yml` runs weekly Monday 9am UTC (+ manual dispatch)
 - **Manual trigger:** "Generate" button on ProposalsCard calls `triggerStrategize` server action → job_queue
-- **Tables:** `proposals` (id, project_id, title, rationale, spec, priority, status, scores, source_theme_ids), `strategy_memory` (id, project_id, proposal_id, event_type, themes, edit_distance)
-- **New project columns:** `product_context` (text, vision/constraints), `autonomy_mode` (text, default 'audit')
+- **Tables:** `proposals` (id, project_id, title, rationale, spec, priority, status, scores, source_theme_ids), `strategy_memory` (id, project_id, proposal_id, event_type, themes, edit_distance), `user_ideas` (id, project_id, text, status)
+- **New project columns:** `product_context` (text, vision/constraints), `autonomy_mode` (text, default 'audit'), `strategic_nudges` (text array, persistent directives for strategize runs)
+- **Strategic nudges:** `projects.strategic_nudges` (text array) — persistent directives injected into strategize prompt as high-priority constraints
+- **User ideas:** `user_ideas` table — submitted via dashboard, included in strategize prompt, marked `incorporated` or `dismissed` after each run
+- **User proposals:** Users can create proposals directly (no AI scoring) — stored with empty `scores` object, shown with "User" badge
 
 ## Installing in a Consumer App
 
