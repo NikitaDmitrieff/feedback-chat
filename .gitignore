@@ -8,3 +8,4 @@ dist/
 .superdesign
 .vercel
 .env*.local
+.worktrees/
