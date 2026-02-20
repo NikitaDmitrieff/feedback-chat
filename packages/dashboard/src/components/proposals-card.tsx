@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Lightbulb, Loader2 } from 'lucide-react'
+import { ArrowRight, Lightbulb, Loader2, Sparkles } from 'lucide-react'
+import { triggerStrategize } from '@/app/projects/[id]/proposals/actions'
 import type { Proposal } from '@/lib/types'
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -14,6 +15,7 @@ const PRIORITY_DOT: Record<string, string> = {
 export function ProposalsCard({ projectId }: { projectId: string }) {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [loading, setLoading] = useState(true)
+  const [triggering, setTriggering] = useState(false)
 
   const fetchProposals = useCallback(async () => {
     setLoading(true)
@@ -32,7 +34,14 @@ export function ProposalsCard({ projectId }: { projectId: string }) {
     fetchProposals()
   }, [fetchProposals])
 
-  if (!loading && proposals.length === 0) return null
+  async function handleTrigger() {
+    setTriggering(true)
+    try {
+      await triggerStrategize(projectId)
+    } finally {
+      setTriggering(false)
+    }
+  }
 
   return (
     <div className="glass-card p-5">
@@ -41,19 +50,37 @@ export function ProposalsCard({ projectId }: { projectId: string }) {
           <Lightbulb className="h-4 w-4 text-accent" />
           <span className="text-sm font-semibold">Proposals</span>
         </div>
-        <Link
-          href={`/projects/${projectId}/proposals`}
-          className="flex items-center gap-1 text-[11px] text-accent transition-colors hover:text-fg"
-        >
-          View all
-          <ArrowRight className="h-3 w-3" />
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleTrigger}
+            disabled={triggering}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-muted transition-colors hover:bg-surface hover:text-fg disabled:opacity-50"
+          >
+            {triggering ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
+            Generate
+          </button>
+          <Link
+            href={`/projects/${projectId}/proposals`}
+            className="flex items-center gap-1 text-[11px] text-accent transition-colors hover:text-fg"
+          >
+            View all
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-6">
           <Loader2 className="h-4 w-4 animate-spin text-muted" />
         </div>
+      ) : proposals.length === 0 ? (
+        <p className="mt-3 text-xs text-muted">
+          No proposals yet. Click Generate to analyze feedback.
+        </p>
       ) : (
         <>
           <p className="mt-2 text-xs text-muted">

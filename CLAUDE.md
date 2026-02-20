@@ -49,11 +49,28 @@ packages/
   - `/api/feedback/[projectId]/testers` (list), `/testers/[testerId]` (profile + timeline)
   - `/api/runs/[projectId]` (list with feedback source enrichment), `/[runId]/logs`, `/[runId]/deployment`
   - `/api/agent/[projectId]/health`, `/api/webhook/[projectId]`, `/api/github-app/webhook`, `/api/github-app/install`
-- Supabase tables: `feedback_sessions`, `feedback_messages`, `feedback_themes` (public schema, RLS enabled)
+  - `/api/proposals/[projectId]` — GET (list by status), PATCH (approve/reject with GitHub issue creation)
+- Proposals page: `/projects/[id]/proposals` — pending/active/completed sections, proposal slide-over with scores/edit/approve/reject
+- ProposalsCard on project overview — shows pending count with "Generate" trigger button
+- Supabase tables: `feedback_sessions`, `feedback_messages`, `feedback_themes`, `proposals`, `strategy_memory` (public schema, RLS enabled)
 - Widget persistence: `createFeedbackHandler` accepts optional `supabase` config for fire-and-forget conversation storage
 - Dashboard uses `@ai-sdk/anthropic` + `ai` (v6) + `zod` for AI classification/digest
 - Glass-card styling pattern: components use `glass-card`, `stat-card` CSS classes with Tailwind theme colors
 - Dashboard async params: Next.js 15 route handlers use `const { projectId } = await params` pattern
+
+## Proposals System (AI Strategist)
+
+- **Purpose:** AI reads accumulated feedback themes and proposes product improvements for human review
+- **Flow:** Feedback themes → strategize-worker (Claude Haiku multi-grader) → proposals table → dashboard review → approve → GitHub issue (auto-implement) → existing pipeline
+- **Job type:** `strategize` — dispatched by managed-worker, runs `strategize-worker.ts`
+- **Multi-grader evaluation:** Each proposal scored on 4 dimensions (impact, feasibility, novelty, alignment) — below 0.6 avg filtered out
+- **Strategy memory:** `strategy_memory` table tracks proposal outcomes (approved/rejected) with edit distance to learn preferences
+- **Edit distance:** Measures how much user changed the spec before approving (0 = unchanged, 1 = rewritten)
+- **Progressive autonomy:** `autonomy_mode` column on projects (`audit` | `assist` | `automate`)
+- **Cron trigger:** GitHub Actions `.github/workflows/strategize.yml` runs weekly Monday 9am UTC (+ manual dispatch)
+- **Manual trigger:** "Generate" button on ProposalsCard calls `triggerStrategize` server action → job_queue
+- **Tables:** `proposals` (id, project_id, title, rationale, spec, priority, status, scores, source_theme_ids), `strategy_memory` (id, project_id, proposal_id, event_type, themes, edit_distance)
+- **New project columns:** `product_context` (text, vision/constraints), `autonomy_mode` (text, default 'audit')
 
 ## Installing in a Consumer App
 

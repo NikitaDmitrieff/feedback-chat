@@ -1,0 +1,53 @@
+name: Strategize — Proactive Improvement Proposals
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday 9am UTC
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Specific project ID (leave empty for all active projects)'
+        required: false
+
+jobs:
+  strategize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger strategize jobs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          # Fetch active projects (with a github_repo configured)
+          PROJECTS=$(curl -sf \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/projects?select=id&github_repo=not.is.null")
+
+          echo "Found projects: $(echo "$PROJECTS" | jq -r 'length')"
+
+          for PROJECT_ID in $(echo "$PROJECTS" | jq -r '.[].id'); do
+            # Skip if a specific project was requested and this isn't it
+            if [ -n "${{ github.event.inputs.project_id }}" ] && [ "$PROJECT_ID" != "${{ github.event.inputs.project_id }}" ]; then
+              continue
+            fi
+
+            # Queue a strategize job
+            RESULT=$(curl -sf -X POST \
+              -H "apikey: $SUPABASE_KEY" \
+              -H "Authorization: Bearer $SUPABASE_KEY" \
+              -H "Content-Type: application/json" \
+              -H "Prefer: return=representation" \
+              "$SUPABASE_URL/rest/v1/job_queue" \
+              -d "{\"project_id\": \"$PROJECT_ID\", \"job_type\": \"strategize\", \"github_issue_number\": 0, \"issue_title\": \"Weekly strategize\", \"issue_body\": \"{}\"}" \
+              || echo "FAILED")
+
+            if [ "$RESULT" = "FAILED" ]; then
+              echo "::warning::Failed to queue strategize for project $PROJECT_ID"
+            else
+              echo "Queued strategize for project $PROJECT_ID"
+            fi
+          done
