@@ -121,3 +121,39 @@ export type TesterProfile = {
   timeline: TimelineEvent[]
   sessions: FeedbackSession[]
 }
+
+export type Proposal = {
+  id: string
+  project_id: string
+  title: string
+  rationale: string
+  spec: string
+  priority: 'high' | 'medium' | 'low'
+  status: 'draft' | 'approved' | 'implementing' | 'done' | 'rejected'
+  source_theme_ids: string[]
+  source_session_ids: string[]
+  user_notes: string | null
+  reject_reason: string | null
+  github_issue_number: number | null
+  scores: {
+    impact?: number
+    feasibility?: number
+    novelty?: number
+    alignment?: number
+  }
+  created_at: string
+  reviewed_at: string | null
+  completed_at: string | null
+}
+
+export type StrategyMemoryEvent = {
+  id: string
+  project_id: string
+  proposal_id: string | null
+  event_type: 'proposed' | 'approved' | 'rejected' | 'completed' | 'failed'
+  title: string
+  themes: string[]
+  outcome_notes: string | null
+  edit_distance: number | null
+  created_at: string
+}
