@@ -32,6 +32,40 @@ export async function GET(
   return NextResponse.json({ proposals })
 }
 
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  const { projectId } = await params
+  const supabase = await createClient()
+
+  const body = await request.json()
+  const { title, spec, priority } = body as { title: string; spec: string; priority: string }
+
+  if (!title?.trim() || !spec?.trim()) {
+    return NextResponse.json({ error: 'Title and spec are required' }, { status: 400 })
+  }
+
+  const { data, error } = await supabase
+    .from('proposals')
+    .insert({
+      project_id: projectId,
+      title: title.trim(),
+      rationale: 'User-created proposal',
+      spec: spec.trim(),
+      priority: priority === 'high' ? 'high' : priority === 'low' ? 'low' : 'medium',
+      scores: {},
+    })
+    .select()
+    .single()
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ proposal: data })
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { ProposalsPageClient } from './client'
-import type { Proposal } from '@/lib/types'
+import type { Proposal, UserIdea } from '@/lib/types'
 
 export default async function ProposalsPage({
   params,
@@ -27,6 +27,13 @@ export default async function ProposalsPage({
     .eq('project_id', id)
     .order('created_at', { ascending: false })
 
+  const { data: ideas } = await supabase
+    .from('user_ideas')
+    .select('*')
+    .eq('project_id', id)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
   return (
     <div className="mx-auto max-w-5xl px-6 pt-10 pb-16">
       <Link
@@ -43,6 +50,7 @@ export default async function ProposalsPage({
         projectId={project.id}
         githubRepo={project.github_repo}
         proposals={(proposals ?? []) as Proposal[]}
+        ideas={(ideas ?? []) as UserIdea[]}
       />
     </div>
   )
