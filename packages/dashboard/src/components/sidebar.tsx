@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FolderKanban, LayoutDashboard, MessageSquare, Lightbulb, Workflow, LogOut } from 'lucide-react'
+import { FolderKanban, LayoutDashboard, MessageSquare, Lightbulb, Workflow, Settings, LogOut } from 'lucide-react'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -116,6 +116,23 @@ export function Sidebar() {
             <Workflow className="h-[15px] w-[15px]" />
           </div>
           {expanded && <span className="truncate text-xs">Pipeline</span>}
+        </Link>
+      )}
+
+      {/* Settings (contextual — only when inside a project) */}
+      {projectId && (
+        <Link
+          href={`/projects/${projectId}/settings`}
+          className={`flex items-center rounded-[16px] transition-colors ${
+            pathname.includes('/settings')
+              ? 'bg-white/[0.08] text-fg'
+              : 'text-muted hover:bg-white/[0.06] hover:text-fg'
+          } ${expanded ? 'gap-2.5 px-2 py-2' : 'justify-center p-1.5'}`}
+        >
+          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center">
+            <Settings className="h-[15px] w-[15px]" />
+          </div>
+          {expanded && <span className="truncate text-xs">Settings</span>}
         </Link>
       )}
 
