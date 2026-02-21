@@ -131,6 +131,20 @@ export async function runSelfImproveJob(input: SelfImproveInput): Promise<{ prUr
     const token = process.env.GITHUB_TOKEN
     if (!token) throw new Error('GITHUB_TOKEN required for self-improvement jobs')
 
+    // Validate push permissions before expensive Claude CLI run
+    const permRes = await fetch(`https://api.github.com/repos/${FEEDBACK_CHAT_REPO}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    })
+    if (permRes.ok) {
+      const repo = await permRes.json()
+      if (!repo.permissions?.push) {
+        throw new Error(
+          `GITHUB_TOKEN lacks push access to ${FEEDBACK_CHAT_REPO}. ` +
+          'Self-improve requires a PAT (ghp_ prefix) with repo scope — GitHub App installation tokens are scoped to consumer repos.',
+        )
+      }
+    }
+
     // Clone without token in URL to avoid leaking it in error messages
     run(`git clone --depth=1 https://github.com/${FEEDBACK_CHAT_REPO}.git ${workDir}`, '/tmp')
     // Set authenticated remote for push
