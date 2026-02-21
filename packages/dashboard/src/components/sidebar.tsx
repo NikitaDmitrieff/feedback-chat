@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FolderKanban, LayoutDashboard, MessageSquare, Bot, Settings, LogOut } from 'lucide-react'
+import { FolderKanban, RefreshCw, Settings, LogOut } from 'lucide-react'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -12,6 +12,8 @@ export function Sidebar() {
 
   const projectMatch = pathname.match(/\/projects\/([^/]+)/)
   const projectId = projectMatch && projectMatch[1] !== 'new' ? projectMatch[1] : null
+
+  const isLoopActive = !!projectId && !pathname.includes('/settings') && !pathname.includes('/runs/') && !pathname.includes('/testers/')
 
   const expand = useCallback(() => {
     if (collapseTimer.current) clearTimeout(collapseTimer.current)
@@ -51,54 +53,20 @@ export function Sidebar() {
         {expanded && <span className="truncate text-xs">Projects</span>}
       </Link>
 
-      {/* Project overview (contextual — only when inside a project) */}
+      {/* Loop (contextual — only when inside a project) */}
       {projectId && (
         <Link
           href={`/projects/${projectId}`}
           className={`flex items-center rounded-[16px] transition-colors ${
-            pathname === `/projects/${projectId}`
+            isLoopActive
               ? 'bg-white/[0.08] text-fg'
               : 'text-muted hover:bg-white/[0.06] hover:text-fg'
           } ${expanded ? 'gap-2.5 px-2 py-2' : 'justify-center p-1.5'}`}
         >
           <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center">
-            <LayoutDashboard className="h-[15px] w-[15px]" />
+            <RefreshCw className="h-[15px] w-[15px]" />
           </div>
-          {expanded && <span className="truncate text-xs">Overview</span>}
-        </Link>
-      )}
-
-      {/* Human (contextual — only when inside a project) */}
-      {projectId && (
-        <Link
-          href={`/projects/${projectId}/feedback`}
-          className={`flex items-center rounded-[16px] transition-colors ${
-            pathname.includes('/feedback')
-              ? 'bg-white/[0.08] text-fg'
-              : 'text-muted hover:bg-white/[0.06] hover:text-fg'
-          } ${expanded ? 'gap-2.5 px-2 py-2' : 'justify-center p-1.5'}`}
-        >
-          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center">
-            <MessageSquare className="h-[15px] w-[15px]" />
-          </div>
-          {expanded && <span className="truncate text-xs">Human</span>}
-        </Link>
-      )}
-
-      {/* Minions (contextual — only when inside a project) */}
-      {projectId && (
-        <Link
-          href={`/projects/${projectId}/minions`}
-          className={`flex items-center rounded-[16px] transition-colors ${
-            pathname.includes('/minions')
-              ? 'bg-white/[0.08] text-fg'
-              : 'text-muted hover:bg-white/[0.06] hover:text-fg'
-          } ${expanded ? 'gap-2.5 px-2 py-2' : 'justify-center p-1.5'}`}
-        >
-          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center">
-            <Bot className="h-[15px] w-[15px]" />
-          </div>
-          {expanded && <span className="truncate text-xs">Minions</span>}
+          {expanded && <span className="truncate text-xs">Loop</span>}
         </Link>
       )}
 

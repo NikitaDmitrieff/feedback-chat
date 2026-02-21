@@ -16,14 +16,16 @@ export function FeedbackList({
   projectId,
   themes,
   onSelectSession,
+  initialThemeFilter,
 }: {
   projectId: string
   themes: FeedbackTheme[]
   onSelectSession: (session: FeedbackSession) => void
+  initialThemeFilter?: string | null
 }) {
   const [sessions, setSessions] = useState<FeedbackSession[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTheme, setActiveTheme] = useState<string | null>(null)
+  const [activeTheme, setActiveTheme] = useState<string | null>(initialThemeFilter ?? null)
 
   const themeMap = useMemo(() => new Map(themes.map((t) => [t.id, t])), [themes])
 
