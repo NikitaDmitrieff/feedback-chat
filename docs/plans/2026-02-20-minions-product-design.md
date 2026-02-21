@@ -71,12 +71,12 @@ Solo developer who wants their project to get better while they sleep. Low cerem
 
 ### Reviewer
 - **Trigger:** Builder creates a PR
-- **Runtime:** Claude CLI (Max subscription)
-- **What it does:** Runs Claude Code against the Builder's diff. Checks for regressions, edge cases, style, security. Posts review comments or approves. User sees only reviewed PRs.
+- **Runtime:** Anthropic SDK (Haiku or Sonnet) — frees CLI sessions for Builders
+- **What it does:** Reads the Builder's diff via GitHub API. Checks for regressions, edge cases, style, security, file-path risk tiers. Posts review comments to the GitHub PR or approves. User sees only reviewed PRs.
 
 ### Cost Model
-Scout and Strategist: cheap Haiku API calls (~$0.25/$1.25 per MTok).
-Builder and Reviewer: Claude CLI under Max subscription — effectively unlimited.
+Scout, Strategist, and Reviewer: cheap Haiku/Sonnet API calls (~$0.25/$1.25 per MTok).
+Builder: Claude CLI under Max subscription — effectively unlimited. Reviewer uses API to free CLI sessions for Builders (CLI concurrency ceiling ~14 sessions).
 
 ## The Branch Graph (Killing Feature)
 
@@ -248,18 +248,24 @@ Low-risk (Assist auto-build): dependency patches, lint fixes, dead code removal,
 - Never force-push. All work on `minions/*` branches
 - Never touch protected branches. PRs only, user merges
 - Scope limits: Builder gets scoped prompt for exactly one proposal
-- Build gate: every PR must pass build + lint + tests
-- Reviewer gate: second Claude CLI pass before user sees PR
+- Build gate: every PR must pass lint + typecheck + build + tests (tiered, fail fast)
+- Reviewer gate: second Claude pass before user sees PR
+- SHA-pinned reviews: Reviewer records the commit SHA it reviewed. Auto-merge verifies HEAD matches reviewed SHA. If HEAD advances, re-trigger review.
+- File-path risk tiers: project settings define high-risk paths (auth, payments, migrations, env). Changes touching high-risk paths always require human review, regardless of autonomy mode.
+- Automated remediation: when build/lint/test fails, Builder feeds error back to Claude CLI for self-repair (max 2 remediation attempts before marking failed)
+- Sandbox safety: clone with `--config core.hooksPath=/dev/null` to disable git hooks. Strip repo CLAUDE.md to prevent prompt injection. Limit env vars passed to CLI.
 - Revert button: one-click revert on any shipped PR
 - Kill switch: "Pause all minions" stops all workers for project
 - Branch cleanup: rejected/failed branches auto-deleted after 7 days
 - Rate limit: max N concurrent branches per project (default 3)
+- Reviewer posts comments to the actual GitHub PR (not just internal branch_events)
 
 ### Strategy Memory
 - Track approvals vs. rejections
 - Record edit distance (how much user modified spec)
 - Feed back into Strategist prompt
 - Proposals align more with user preferences over time
+- Revert memory: when a shipped PR is reverted, capture the reason and feed into Reviewer + Strategist context to prevent similar mistakes
 
 ## Data Model (New/Modified Tables)
 
@@ -270,13 +276,14 @@ Low-risk (Assist auto-build): dependency patches, lint fixes, dead code removal,
 `id`, `project_id`, `score` (0-100), `breakdown` (JSON: code_quality, test_coverage, dep_health, security, docs), `findings_count`, `snapshot_date`
 
 ### `branch_events`
-`id`, `project_id`, `branch_name`, `event_type`, `event_data` (JSON), `actor`, `created_at`
+`id`, `project_id`, `branch_name`, `event_type`, `event_data` (JSON), `actor`, `commit_sha` (text, nullable — set on build_completed, review_approved, pr_merged), `created_at`
+- Event types: `scout_finding`, `proposal_created`, `proposal_approved`, `proposal_rejected`, `build_started`, `build_completed`, `build_failed`, `build_remediation`, `review_started`, `review_approved`, `review_rejected`, `pr_created`, `pr_merged`, `deploy_preview`, `deploy_production`, `branch_deleted`
 
 ### `proposals` (adapted from feedback-chat)
 Same schema but `source_finding_ids` instead of `source_theme_ids`
 
 ### `projects` (extended)
-Add: `repo_url`, `default_branch`, `scout_schedule`, `autonomy_mode`, `product_context`, `strategic_nudges`
+Add: `repo_url`, `default_branch`, `scout_schedule`, `autonomy_mode`, `product_context`, `strategic_nudges`, `risk_paths` (jsonb — `{ high: ["src/auth/**", "migrations/**"], medium: ["src/api/**"] }`)
 
 ## Tech Stack
 

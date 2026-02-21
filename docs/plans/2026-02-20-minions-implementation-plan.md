@@ -312,7 +312,7 @@ CREATE TABLE IF NOT EXISTS feedback_chat.branch_events (
   branch_name text, -- null for events not tied to a branch (e.g. scout_finding before proposal)
   event_type text NOT NULL CHECK (event_type IN (
     'scout_finding', 'proposal_created', 'proposal_approved', 'proposal_rejected',
-    'build_started', 'build_completed', 'build_failed',
+    'build_started', 'build_completed', 'build_failed', 'build_remediation',
     'review_started', 'review_approved', 'review_rejected',
     'pr_created', 'pr_merged', 'deploy_preview', 'deploy_production',
     'branch_deleted'
@@ -321,6 +321,7 @@ CREATE TABLE IF NOT EXISTS feedback_chat.branch_events (
   -- Flexible payload: finding details, proposal scores, PR URL, diff stats, etc.
   actor text NOT NULL DEFAULT 'system',
   -- 'scout', 'strategist', 'builder', 'reviewer', 'user'
+  commit_sha text, -- SHA of the commit this event relates to (set on build_completed, review_approved, pr_merged)
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -367,7 +368,9 @@ ALTER TABLE feedback_chat.projects
   ADD COLUMN IF NOT EXISTS scout_schedule text DEFAULT '0 6 * * *',
   -- cron expression, default daily at 6am UTC
   ADD COLUMN IF NOT EXISTS max_concurrent_branches integer DEFAULT 3,
-  ADD COLUMN IF NOT EXISTS paused boolean DEFAULT false;
+  ADD COLUMN IF NOT EXISTS paused boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS risk_paths jsonb DEFAULT '{"high": [], "medium": []}';
+  -- File-path risk tiers: { high: ["src/auth/**", "migrations/**"], medium: ["src/api/**"] }
 
 -- Update proposals to use source_finding_ids instead of source_theme_ids
 ALTER TABLE feedback_chat.proposals
@@ -448,7 +451,8 @@ function getAnthropicClient(): Anthropic {
 function cloneRepo(repoUrl: string, token: string, branch: string): string {
   const workdir = mkdtempSync(join(tmpdir(), 'minions-scout-'));
   const authedUrl = repoUrl.replace('https://', `https://x-access-token:${token}@`);
-  execSync(`git clone --depth 1 --branch ${branch} ${authedUrl} repo`, {
+  // Disable git hooks to prevent arbitrary code execution from untrusted repos
+  execSync(`git clone --depth 1 --branch ${branch} --config core.hooksPath=/dev/null ${authedUrl} repo`, {
     cwd: workdir,
     timeout: 60_000,
     stdio: 'pipe',
@@ -580,9 +584,24 @@ export async function runScoutJob(input: ScoutJobInput): Promise<void> {
     );
     const allFindings = results.flat();
 
+    // Deduplicate: fetch existing open findings to avoid inserting duplicates
+    const { data: existing } = await supabase
+      .from('findings')
+      .select('title, file_path')
+      .eq('project_id', input.projectId)
+      .eq('status', 'open');
+
+    const existingKeys = new Set(
+      (existing || []).map(f => `${f.title}::${f.file_path || ''}`)
+    );
+
+    const newFindings = allFindings.filter(
+      f => !existingKeys.has(`${f.title}::${f.file_path || ''}`)
+    );
+
     // Store findings
-    if (allFindings.length > 0) {
-      const rows = allFindings.map(f => ({
+    if (newFindings.length > 0) {
+      const rows = newFindings.map(f => ({
         project_id: input.projectId,
         category: f.category,
         severity: f.severity,
@@ -595,8 +614,8 @@ export async function runScoutJob(input: ScoutJobInput): Promise<void> {
 
       await supabase.from('findings').insert(rows);
 
-      // Emit branch events for each finding
-      const events = allFindings.map(f => ({
+      // Emit branch events for each new finding
+      const events = newFindings.map(f => ({
         project_id: input.projectId,
         branch_name: null,
         event_type: 'scout_finding',
@@ -798,18 +817,24 @@ git commit -m "feat: adapt strategist to use findings instead of feedback themes
 
 **Step 1: Write the builder worker**
 
-The Builder follows the same pattern as `worker.ts` (runs Claude CLI via subprocess), but is scoped to a single proposal. It creates a `minions/*` branch and a PR.
+The Builder follows the same pattern as `worker.ts` (runs Claude CLI via subprocess), but is scoped to a single proposal. It creates a `minions/*` branch and a PR. Key improvements over naive approach:
+- **Sandbox safety:** disables git hooks, strips repo CLAUDE.md, limits env vars
+- **Remediation loops:** on build/lint/test failure, feeds error back to CLI (max 2 retries)
+- **Octokit for PRs:** uses GitHub REST API instead of `gh` CLI (not available in Docker)
+- **SHA tracking:** records commit SHA on build_completed events
 
 ```typescript
 // packages/agent/src/builder-worker.ts
 import { execSync, spawn } from 'child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { createClient } from '@supabase/supabase-js';
+import { Octokit } from '@octokit/rest';
 
 const CLAUDE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-const BUILD_TIMEOUT_MS = 3 * 60 * 1000;   // 3 minutes
+const VALIDATION_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+const MAX_REMEDIATION_ATTEMPTS = 2;
 
 interface BuilderJobInput {
   projectId: string;
@@ -829,6 +854,54 @@ function slugify(title: string): string {
     .slice(0, 40);
 }
 
+function runClaude(cwd: string, prompt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('claude', [
+      '--dangerously-skip-permissions',
+      '-p', prompt,
+    ], {
+      cwd,
+      env: {
+        HOME: process.env.HOME,
+        PATH: process.env.PATH,
+        CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN,
+      },
+      timeout: CLAUDE_TIMEOUT_MS,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
+    proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+
+    proc.on('close', (code) => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`Claude CLI exited ${code}: ${stderr.slice(0, 500)}`));
+    });
+    proc.on('error', reject);
+  });
+}
+
+// Tiered validation: lint → typecheck → build → test (fail fast on cheapest)
+function runValidation(repoDir: string): { passed: boolean; stage: string; error: string } {
+  const stages = [
+    { name: 'lint', cmd: 'npm run lint --if-present' },
+    { name: 'typecheck', cmd: 'npx tsc --noEmit --pretty false' },
+    { name: 'build', cmd: 'npm run build' },
+    { name: 'test', cmd: 'npm test --if-present' },
+  ];
+
+  for (const stage of stages) {
+    try {
+      execSync(stage.cmd, { cwd: repoDir, timeout: VALIDATION_TIMEOUT_MS, stdio: 'pipe' });
+    } catch (e) {
+      return { passed: false, stage: stage.name, error: (e as Error).message.slice(0, 2000) };
+    }
+  }
+  return { passed: true, stage: 'all', error: '' };
+}
+
 export async function runBuilderJob(input: BuilderJobInput): Promise<{
   branchName: string;
   prNumber: number;
@@ -845,9 +918,22 @@ export async function runBuilderJob(input: BuilderJobInput): Promise<{
   const repoDir = join(workdir, 'repo');
   const authedUrl = input.repoUrl.replace('https://', `https://x-access-token:${input.installationToken}@`);
 
+  // Parse owner/repo from URL
+  const repoPath = input.repoUrl.replace('https://github.com/', '').replace(/\.git$/, '');
+  const [owner, repo] = repoPath.split('/');
+  const octokit = new Octokit({ auth: input.installationToken });
+
   try {
-    // Clone and create branch
-    execSync(`git clone ${authedUrl} repo`, { cwd: workdir, timeout: 60_000, stdio: 'pipe' });
+    // Clone with safety: disable git hooks to prevent arbitrary code execution
+    execSync(
+      `git clone --config core.hooksPath=/dev/null ${authedUrl} repo`,
+      { cwd: workdir, timeout: 60_000, stdio: 'pipe' }
+    );
+
+    // Sandbox: strip repo's CLAUDE.md to prevent prompt injection
+    const repoClaude = join(repoDir, 'CLAUDE.md');
+    if (existsSync(repoClaude)) unlinkSync(repoClaude);
+
     execSync(`git checkout -b ${branchName}`, { cwd: repoDir, stdio: 'pipe' });
 
     // Emit build_started event
@@ -859,7 +945,7 @@ export async function runBuilderJob(input: BuilderJobInput): Promise<{
       actor: 'builder',
     });
 
-    // Write a CLAUDE.md with the scoped prompt
+    // Scoped prompt for Claude CLI
     const prompt = `You are implementing a single, scoped change for this codebase.
 
 ## Proposal: ${input.proposalTitle}
@@ -873,48 +959,57 @@ ${input.proposalSpec}
 - Do not refactor unrelated code.
 - Do not add features beyond the proposal scope.`;
 
-    writeFileSync(join(repoDir, '.minions-prompt.md'), prompt);
+    // Run Claude CLI (initial attempt)
+    await runClaude(repoDir, prompt);
 
-    // Run Claude CLI
-    const claudeProcess = spawn('claude', [
-      '--dangerously-skip-permissions',
-      '-p', prompt,
-      '--output-format', 'json',
-    ], {
-      cwd: repoDir,
-      env: {
-        ...process.env,
-        CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN,
-      },
-      timeout: CLAUDE_TIMEOUT_MS,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    // Tiered validation with remediation loop
+    let validation = runValidation(repoDir);
+    let remediationAttempt = 0;
 
-    let stdout = '';
-    let stderr = '';
-    claudeProcess.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
-    claudeProcess.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+    while (!validation.passed && remediationAttempt < MAX_REMEDIATION_ATTEMPTS) {
+      remediationAttempt++;
 
-    await new Promise<void>((resolve, reject) => {
-      claudeProcess.on('close', (code: number | null) => {
-        if (code === 0) resolve();
-        else reject(new Error(`Claude CLI exited with code ${code}: ${stderr.slice(0, 500)}`));
+      // Emit remediation event
+      await supabase.from('branch_events').insert({
+        project_id: input.projectId,
+        branch_name: branchName,
+        event_type: 'build_remediation',
+        event_data: {
+          attempt: remediationAttempt,
+          failed_stage: validation.stage,
+          error: validation.error.slice(0, 1000),
+        },
+        actor: 'builder',
       });
-      claudeProcess.on('error', reject);
-    });
 
-    // Validate: build + lint
-    try {
-      execSync('npm run build', { cwd: repoDir, timeout: BUILD_TIMEOUT_MS, stdio: 'pipe' });
-    } catch (e) {
+      // Feed error back to Claude CLI for self-repair
+      const fixPrompt = `The ${validation.stage} step failed with the following error. Fix it.
+
+Error output:
+${validation.error.slice(0, 5000)}
+
+Rules:
+- Fix ONLY the error described above.
+- Do not change anything else.
+- Run ${validation.stage} again after fixing.`;
+
+      await runClaude(repoDir, fixPrompt);
+      validation = runValidation(repoDir);
+    }
+
+    if (!validation.passed) {
       await supabase.from('branch_events').insert({
         project_id: input.projectId,
         branch_name: branchName,
         event_type: 'build_failed',
-        event_data: { error: 'Build failed', output: (e as Error).message.slice(0, 1000) },
+        event_data: {
+          stage: validation.stage,
+          error: validation.error.slice(0, 1000),
+          remediation_attempts: remediationAttempt,
+        },
         actor: 'builder',
       });
-      throw new Error(`Build failed: ${(e as Error).message.slice(0, 500)}`);
+      throw new Error(`${validation.stage} failed after ${remediationAttempt} remediation attempts`);
     }
 
     // Check if there are actual changes
@@ -923,23 +1018,24 @@ ${input.proposalSpec}
       throw new Error('Claude CLI produced no changes');
     }
 
-    // Commit, push, create PR
+    // Commit and push
     execSync('git add -A', { cwd: repoDir, stdio: 'pipe' });
     execSync(`git commit -m "feat: ${input.proposalTitle}"`, { cwd: repoDir, stdio: 'pipe' });
+    const commitSha = execSync('git rev-parse HEAD', { cwd: repoDir, encoding: 'utf-8' }).trim();
     execSync(`git push origin ${branchName}`, { cwd: repoDir, timeout: 30_000, stdio: 'pipe' });
 
-    // Create PR via GitHub API
+    // Create PR via Octokit (not gh CLI — Docker doesn't have it)
     const prBody = `## Proposal\n\n${input.proposalSpec}\n\n---\n*Built by Minions Builder*`;
-    const prResult = execSync(
-      `gh pr create --repo ${input.repoUrl.replace('https://github.com/', '')} ` +
-      `--head ${branchName} --base ${input.defaultBranch} ` +
-      `--title "${input.proposalTitle}" --body "${prBody.replace(/"/g, '\\"')}"`,
-      { cwd: repoDir, encoding: 'utf-8', timeout: 15_000 }
-    );
-    const prUrl = prResult.trim();
-    const prNumber = parseInt(prUrl.split('/').pop() || '0');
+    const { data: pr } = await octokit.pulls.create({
+      owner,
+      repo,
+      title: input.proposalTitle,
+      body: prBody,
+      head: branchName,
+      base: input.defaultBranch,
+    });
 
-    // Emit events
+    // Emit events with commit SHA
     await supabase.from('branch_events').insert([
       {
         project_id: input.projectId,
@@ -947,22 +1043,24 @@ ${input.proposalSpec}
         event_type: 'build_completed',
         event_data: { diff_stats: diff.trim(), proposal_id: input.proposalId },
         actor: 'builder',
+        commit_sha: commitSha,
       },
       {
         project_id: input.projectId,
         branch_name: branchName,
         event_type: 'pr_created',
-        event_data: { pr_number: prNumber, pr_url: prUrl },
+        event_data: { pr_number: pr.number, pr_url: pr.html_url },
         actor: 'builder',
+        commit_sha: commitSha,
       },
     ]);
 
     // Update proposal status
     await supabase.from('proposals')
-      .update({ status: 'implementing', github_issue_number: prNumber })
+      .update({ status: 'implementing', github_issue_number: pr.number })
       .eq('id', input.proposalId);
 
-    return { branchName, prNumber, prUrl };
+    return { branchName, prNumber: pr.number, prUrl: pr.html_url };
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }
@@ -991,17 +1089,18 @@ git commit -m "feat: add builder worker — implements proposals via Claude CLI"
 
 **Step 1: Write the reviewer worker**
 
-The Reviewer checks the Builder's PR using Claude CLI, posts review comments, and emits branch events.
+The Reviewer uses the Anthropic SDK (not Claude CLI) to free CLI sessions for Builders. Key improvements:
+- **SDK instead of CLI:** Uses Haiku/Sonnet via `ANTHROPIC_API_KEY` — cheaper and frees CLI concurrency slots
+- **SHA-pinned reviews:** Records the commit SHA it reviewed. Downstream merge checks verify HEAD matches.
+- **File-path risk tiers:** Checks if changed files touch high-risk paths from project settings. Flags for human review.
+- **Posts to GitHub PR:** Review comments are posted to the actual PR via Octokit, not just stored in branch_events.
 
 ```typescript
 // packages/agent/src/reviewer-worker.ts
-import { execSync, spawn } from 'child_process';
-import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
-
-const CLAUDE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+import { Octokit } from '@octokit/rest';
+import { minimatch } from 'minimatch';
 
 interface ReviewerJobInput {
   projectId: string;
@@ -1013,104 +1112,164 @@ interface ReviewerJobInput {
   installationToken: string;
 }
 
-export async function runReviewerJob(input: ReviewerJobInput): Promise<{
+interface ReviewResult {
   approved: boolean;
   comments: string[];
-}> {
+  risk_flags: string[];
+}
+
+function getAnthropicClient(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY required for Reviewer');
+  return new Anthropic({ apiKey });
+}
+
+// Check if any changed files match high-risk or medium-risk path patterns
+function checkRiskPaths(
+  changedFiles: string[],
+  riskPaths: { high: string[]; medium: string[] }
+): { level: 'high' | 'medium' | 'low'; matches: string[] } {
+  const highMatches = changedFiles.filter(f =>
+    riskPaths.high.some(pattern => minimatch(f, pattern))
+  );
+  if (highMatches.length > 0) return { level: 'high', matches: highMatches };
+
+  const mediumMatches = changedFiles.filter(f =>
+    riskPaths.medium.some(pattern => minimatch(f, pattern))
+  );
+  if (mediumMatches.length > 0) return { level: 'medium', matches: mediumMatches };
+
+  return { level: 'low', matches: [] };
+}
+
+export async function runReviewerJob(input: ReviewerJobInput): Promise<ReviewResult> {
+  const anthropic = getAnthropicClient();
   const supabase = createClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { db: { schema: 'feedback_chat' } }
   );
 
-  const workdir = mkdtempSync(join(tmpdir(), 'minions-reviewer-'));
-  const repoDir = join(workdir, 'repo');
-  const authedUrl = input.repoUrl.replace('https://', `https://x-access-token:${input.installationToken}@`);
+  const repoPath = input.repoUrl.replace('https://github.com/', '').replace(/\.git$/, '');
+  const [owner, repo] = repoPath.split('/');
+  const octokit = new Octokit({ auth: input.installationToken });
 
-  try {
-    // Clone and checkout the PR branch
-    execSync(`git clone ${authedUrl} repo`, { cwd: workdir, timeout: 60_000, stdio: 'pipe' });
-    execSync(`git checkout ${input.branchName}`, { cwd: repoDir, stdio: 'pipe' });
+  // Emit review_started
+  await supabase.from('branch_events').insert({
+    project_id: input.projectId,
+    branch_name: input.branchName,
+    event_type: 'review_started',
+    event_data: { pr_number: input.prNumber },
+    actor: 'reviewer',
+  });
 
-    // Get the diff against the base branch
-    const diff = execSync(`git diff ${input.defaultBranch}...${input.branchName}`, {
-      cwd: repoDir,
-      encoding: 'utf-8',
-      maxBuffer: 1024 * 1024,
-    });
+  // Fetch PR diff and changed files via GitHub API (no clone needed)
+  const [{ data: files }, { data: pr }] = await Promise.all([
+    octokit.pulls.listFiles({ owner, repo, pull_number: input.prNumber }),
+    octokit.pulls.get({ owner, repo, pull_number: input.prNumber }),
+  ]);
 
-    // Emit review_started
-    await supabase.from('branch_events').insert({
-      project_id: input.projectId,
-      branch_name: input.branchName,
-      event_type: 'review_started',
-      event_data: { pr_number: input.prNumber },
-      actor: 'reviewer',
-    });
+  const headSha = pr.head.sha;
+  const changedFileNames = files.map(f => f.filename);
+  const diffContent = files.map(f =>
+    `--- ${f.filename} (${f.status}, +${f.additions} -${f.deletions})\n${f.patch || '(binary)'}`
+  ).join('\n\n');
 
-    // Run Claude CLI to review
-    const reviewPrompt = `You are reviewing a pull request. Analyze the diff below for:
+  // Check file-path risk tiers
+  const { data: project } = await supabase
+    .from('projects')
+    .select('risk_paths')
+    .eq('id', input.projectId)
+    .single();
+
+  const riskPaths = project?.risk_paths || { high: [], medium: [] };
+  const risk = checkRiskPaths(changedFileNames, riskPaths);
+
+  // Fetch revert lessons from strategy memory for context
+  const { data: lessons } = await supabase
+    .from('strategy_memory')
+    .select('themes')
+    .eq('project_id', input.projectId)
+    .eq('event_type', 'reverted')
+    .limit(10);
+
+  const lessonsContext = lessons?.length
+    ? `\nPast reverted changes (avoid similar mistakes):\n${lessons.map(l => `- ${l.themes}`).join('\n')}`
+    : '';
+
+  // Run Haiku/Sonnet review via Anthropic SDK
+  const reviewPrompt = `You are reviewing a pull request. Analyze the diff for:
 1. Bugs or logic errors
 2. Security vulnerabilities
 3. Performance regressions
 4. Missing error handling
 5. Style/convention violations
+${risk.level !== 'low' ? `\n⚠️ HIGH-RISK FILES CHANGED: ${risk.matches.join(', ')}. Extra scrutiny required.` : ''}
+${lessonsContext}
 
-Respond with JSON: { "approved": boolean, "comments": ["issue 1", "issue 2"] }
-If the code is good, set approved: true and comments: [].
-No code fences. Just JSON.
+Changed files: ${changedFileNames.join(', ')}
 
 Diff:
-${diff.slice(0, 50_000)}`;
+${diffContent.slice(0, 80_000)}
 
-    const claudeProcess = spawn('claude', [
-      '--dangerously-skip-permissions',
-      '-p', reviewPrompt,
-      '--output-format', 'json',
-    ], {
-      cwd: repoDir,
-      env: {
-        ...process.env,
-        CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN,
-      },
-      timeout: CLAUDE_TIMEOUT_MS,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+Respond with JSON: { "approved": boolean, "comments": ["issue description"] }
+If the code is good, set approved: true and comments: [].
+No code fences. Just the JSON object.`;
 
-    let stdout = '';
-    claudeProcess.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 4096,
+    messages: [{ role: 'user', content: reviewPrompt }],
+  });
 
-    await new Promise<void>((resolve, reject) => {
-      claudeProcess.on('close', (code: number | null) => {
-        if (code === 0) resolve();
-        else reject(new Error(`Reviewer Claude CLI exited with code ${code}`));
-      });
-      claudeProcess.on('error', reject);
-    });
+  const text = (response.content[0] as { type: string; text: string }).text;
+  const cleaned = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
 
-    // Parse review result
-    const cleaned = stdout.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-    let result: { approved: boolean; comments: string[] };
-    try {
-      result = JSON.parse(cleaned);
-    } catch {
-      // If parsing fails, default to approved with a note
-      result = { approved: true, comments: ['Review parsing failed — defaulting to approved'] };
-    }
-
-    // Emit review result event
-    await supabase.from('branch_events').insert({
-      project_id: input.projectId,
-      branch_name: input.branchName,
-      event_type: result.approved ? 'review_approved' : 'review_rejected',
-      event_data: { pr_number: input.prNumber, comments: result.comments },
-      actor: 'reviewer',
-    });
-
-    return result;
-  } finally {
-    rmSync(workdir, { recursive: true, force: true });
+  let result: ReviewResult;
+  try {
+    const parsed = JSON.parse(cleaned) as { approved: boolean; comments: string[] };
+    result = { ...parsed, risk_flags: risk.matches };
+  } catch {
+    result = { approved: true, comments: ['Review parsing failed — defaulting to approved'], risk_flags: [] };
   }
+
+  // If high-risk files are touched, force human review regardless of AI approval
+  if (risk.level === 'high') {
+    result.approved = false;
+    result.comments.unshift(
+      `⚠️ HIGH-RISK FILES MODIFIED: ${risk.matches.join(', ')}. Requires human review.`
+    );
+  }
+
+  // Post review to the actual GitHub PR
+  const reviewBody = result.approved
+    ? '✅ **Minions Reviewer: Approved**\n\nNo issues found.'
+    : `⚠️ **Minions Reviewer: Changes Requested**\n\n${result.comments.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
+
+  await octokit.pulls.createReview({
+    owner,
+    repo,
+    pull_number: input.prNumber,
+    event: result.approved ? 'APPROVE' : 'REQUEST_CHANGES',
+    body: reviewBody,
+  });
+
+  // Emit review result event with SHA
+  await supabase.from('branch_events').insert({
+    project_id: input.projectId,
+    branch_name: input.branchName,
+    event_type: result.approved ? 'review_approved' : 'review_rejected',
+    event_data: {
+      pr_number: input.prNumber,
+      comments: result.comments,
+      risk_level: risk.level,
+      risk_files: risk.matches,
+    },
+    actor: 'reviewer',
+    commit_sha: headSha,
+  });
+
+  return result;
 }
 ```
 
