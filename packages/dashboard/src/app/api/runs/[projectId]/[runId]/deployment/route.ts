@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getInstallationOctokit } from '@/lib/github-app'
+import { getInstallationToken } from '@/lib/github-app'
 
 export async function GET(
   _request: NextRequest,
@@ -39,14 +39,15 @@ export async function GET(
 
   if (project.github_installation_id) {
     try {
-      const octokit = await getInstallationOctokit(project.github_installation_id)
-      const { token } = (await octokit.auth({ type: 'installation' })) as { token: string }
+      const token = await getInstallationToken(project.github_installation_id)
       headers = {
         Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github.v3+json',
       }
-    } catch {
-      return NextResponse.json({ state: null, previewUrl: null, description: 'GitHub App authentication failed' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[deployment] GitHub App auth failed:', msg)
+      return NextResponse.json({ state: null, previewUrl: null, description: `GitHub App auth failed: ${msg.slice(0, 100)}` })
     }
   } else if (process.env.GITHUB_TOKEN) {
     headers = {
