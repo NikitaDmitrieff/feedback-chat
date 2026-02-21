@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, XCircle, Eye } from 'lucide-react'
+import Link from 'next/link'
+import { CheckCircle2, XCircle, Eye, GitBranch, Loader2, ExternalLink } from 'lucide-react'
 import { StepDots } from '@/components/step-dots'
 import { ProposalSlideOver } from '@/components/proposal-slide-over'
+import { LiveLogTail } from '@/components/live-log-tail'
 import { FeedbackList } from '@/components/feedback-list'
 import { FeedbackSlideOver } from '@/components/feedback-slide-over'
 import type { Proposal, PipelineRun, FeedbackTheme, FeedbackSession } from '@/lib/types'
@@ -53,11 +55,21 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`
 }
 
+function elapsed(start: string, end?: string | null): string {
+  const ms = (end ? new Date(end).getTime() : Date.now()) - new Date(start).getTime()
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ${s % 60}s`
+  return `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
 export function LoopPageClient({ projectId, projectName, githubRepo, proposals: initialProposals, themes, runs, activeJobs }: Props) {
   const [proposals, setProposals] = useState(initialProposals)
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [selectedTheme, setSelectedTheme] = useState<FeedbackTheme | null>(null)
   const [selectedSession, setSelectedSession] = useState<FeedbackSession | null>(null)
+  const [expandedRun, setExpandedRun] = useState<string | null>(null)
 
   // Build map: issue_number → run
   const runByIssue = new Map<number, Run>()
@@ -78,6 +90,14 @@ export function LoopPageClient({ projectId, projectName, githubRepo, proposals: 
       if (run?.stage === 'preview_ready') return true
     }
     return false
+  })
+
+  // In-progress proposals (approved/implementing, NOT preview-ready — those go to "needs attention")
+  const building = proposals.filter(p => {
+    if (p.status !== 'approved' && p.status !== 'implementing') return false
+    const run = p.github_issue_number ? runByIssue.get(p.github_issue_number) : null
+    if (run?.stage === 'preview_ready') return false // shown in "needs attention"
+    return true
   })
 
   const shipped = proposals.filter(p => ['done', 'rejected'].includes(p.status)).slice(0, 15)
@@ -183,7 +203,116 @@ export function LoopPageClient({ projectId, projectName, githubRepo, proposals: 
         )}
       </section>
 
-      {/* Section 3: Shipped */}
+      {/* Section 3: What's building */}
+      {building.length > 0 && (
+        <section className="mb-10">
+          <div className="mb-4 flex items-center gap-2">
+            <h2 className="text-xs font-medium uppercase tracking-wider text-muted">
+              What&apos;s building
+            </h2>
+            <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-amber-400">
+              {building.length}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {building.map(p => {
+              const run = p.github_issue_number ? runByIssue.get(p.github_issue_number) : null
+              const sourceThemes = getSourceThemes(p)
+              return (
+                <div key={p.id} className="glass-card p-4">
+                  <button
+                    onClick={() => setSelected(p)}
+                    className="flex w-full items-start justify-between gap-3 text-left"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${PRIORITY_DOT[p.priority] ?? 'bg-gray-400'}`} />
+                        <p className="truncate text-sm font-medium text-fg">{p.title}</p>
+                      </div>
+                      <div className="mt-2">
+                        <StepDots proposal={p} run={run as PipelineRun | null} />
+                      </div>
+                    </div>
+                    {run && (
+                      <span className="shrink-0 text-[11px] tabular-nums text-muted">
+                        {elapsed(run.started_at, run.completed_at)}
+                      </span>
+                    )}
+                  </button>
+                  {p.branch_name && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[11px] text-dim">
+                      <GitBranch className="h-3 w-3" />
+                      {p.branch_name}
+                    </div>
+                  )}
+                  {run?.github_pr_number && githubRepo && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent">
+                      <a
+                        href={`https://github.com/${githubRepo}/pull/${run.github_pr_number}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 hover:text-fg"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        PR #{run.github_pr_number}
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    </div>
+                  )}
+                  {sourceThemes.length > 0 && (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span className="text-[11px] text-dim">from</span>
+                      {sourceThemes.slice(0, 2).map(t => (
+                        <span key={t.id} className="flex items-center gap-1 text-[11px] text-muted">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: t.color }} />
+                          {t.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {/* Expandable live logs */}
+                  {run && !run.result && (
+                    <div className="mt-3">
+                      {expandedRun === run.id ? (
+                        <>
+                          <button
+                            onClick={() => setExpandedRun(null)}
+                            className="mb-2 text-[11px] text-accent hover:text-fg"
+                          >
+                            Hide logs
+                          </button>
+                          <LiveLogTail projectId={projectId} runId={run.id} compact maxLines={20} />
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setExpandedRun(run.id)}
+                          className="text-[11px] text-accent hover:text-fg"
+                        >
+                          Show live logs
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {/* View run detail link */}
+                  {run && (
+                    <div className="mt-2">
+                      <Link
+                        href={`/projects/${projectId}/runs/${run.id}`}
+                        className="text-[11px] text-muted hover:text-fg"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        View run details →
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Section 4: Shipped */}
       <section>
         <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted">
           Shipped
