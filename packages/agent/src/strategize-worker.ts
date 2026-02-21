@@ -45,8 +45,11 @@ export async function runStrategizeJob(input: StrategizeInput): Promise<void> {
     return
   }
 
-  if (!themes?.length && !sessions?.length) {
-    console.log(`[strategize] Skipping project ${projectId}: no feedback data`)
+  const hasFeedback = !!(themes?.length || sessions?.length)
+  const hasContext = !!(project.product_context || (project.strategic_nudges as string[] ?? []).length || pendingIdeas?.length)
+
+  if (!hasFeedback && !hasContext) {
+    console.log(`[strategize] Skipping project ${projectId}: no feedback data and no product context`)
     return
   }
 
@@ -101,7 +104,8 @@ ${memoryContext}
 ${nudgesContext ? `\n## Strategic directives from the product owner (HIGH PRIORITY — follow these)\n${nudgesContext}\n` : ''}
 ${ideasContext ? `\n## User-submitted ideas to consider\n${ideasContext}\n` : ''}
 Based on this data, identify 1-${MAX_PROPOSALS_PER_RUN} concrete improvement opportunities. For each:
-- Focus on recurring themes with high frequency
+- If feedback themes exist, focus on recurring themes with high frequency
+- If no feedback exists yet, derive proposals from the product vision, strategic directives, and user ideas
 - Do NOT re-propose anything that was recently rejected
 - Do NOT propose what already exists in existing proposals
 - Be specific and actionable (not vague like "improve UX")

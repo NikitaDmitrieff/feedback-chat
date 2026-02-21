@@ -38,21 +38,22 @@ describe('strategize-worker', () => {
     expect(typeof runStrategizeJob).toBe('function')
   })
 
-  it('skips when project has no feedback data', async () => {
-    const supabase = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { name: 'Test', github_repo: 'test/repo', product_context: null } }),
-            order: vi.fn().mockReturnValue({
-              limit: vi.fn().mockResolvedValue({ data: [] }),
-            }),
-          }),
-        }),
-      }),
+  it('skips when project has no feedback data and no product context', async () => {
+    const mockChain = () => {
+      const chain: Record<string, unknown> = {}
+      chain.select = vi.fn().mockReturnValue(chain)
+      chain.eq = vi.fn().mockReturnValue(chain)
+      chain.order = vi.fn().mockReturnValue(chain)
+      chain.limit = vi.fn().mockResolvedValue({ data: [] })
+      chain.single = vi.fn().mockResolvedValue({ data: { name: 'Test', github_repo: 'test/repo', product_context: null, strategic_nudges: [] } })
+      return chain
     }
 
-    // Should not throw
+    const supabase = {
+      from: vi.fn().mockImplementation(() => mockChain()),
+    }
+
+    // Should not throw — skips silently
     await runStrategizeJob({
       jobId: 'test-job',
       projectId: 'test-project',
