@@ -264,7 +264,7 @@ ANTHROPIC_API_KEY=sk-ant-...       # Required
 FEEDBACK_PASSWORD=your-password    # Required
 GITHUB_TOKEN=ghp_...              # MUST be a PAT (ghp_ prefix), NOT an OAuth token (gho_)
 GITHUB_REPO=owner/repo            # e.g. nikitadmitrieff/my-app
-VERCEL_AUTOMATION_BYPASS_SECRET=...# Recommended — see Step 8b
+VERCEL_AUTOMATION_BYPASS_SECRET=...# Recommended — see Step 8c
 ```
 
 **IMPORTANT: `GITHUB_TOKEN` must start with `ghp_` (Personal Access Token).** Tokens starting with `gho_` are short-lived GitHub OAuth tokens that expire after ~8 hours. Generate a PAT at https://github.com/settings/tokens/new with `repo` + `workflow` scopes.
@@ -279,10 +279,35 @@ FEEDBACK_PASSWORD=your-password    # Required
 GITHUB_TOKEN=ghp_...              # MUST be a PAT (ghp_ prefix)
 GITHUB_REPO=owner/repo            # e.g. nikitadmitrieff/my-app
 AGENT_URL=https://your-agent.railway.app
-VERCEL_AUTOMATION_BYPASS_SECRET=...# Recommended — see Step 8b
+VERCEL_AUTOMATION_BYPASS_SECRET=...# Recommended — see Step 8c
 ```
 
-### Step 8b: Configure Vercel preview bypass (+ GitHub and + Pipeline)
+### Step 8b: Add env vars to your deployment platform
+
+> **`.env.local` is local-only.** When you deploy to Vercel (or any platform), you must add the same environment variables there too — they do NOT carry over from `.env.local`.
+
+Go to your Vercel project → **Settings** → **Environment Variables** and add every var from Step 8 that applies to your tier:
+
+| Tier | Required on Vercel |
+|------|-------------------|
+| **Chat only** | `ANTHROPIC_API_KEY`, `FEEDBACK_PASSWORD` |
+| **+ GitHub** | All above + `GITHUB_TOKEN`, `GITHUB_REPO` |
+| **+ Pipeline** | All above + `AGENT_URL`, `VERCEL_AUTOMATION_BYPASS_SECRET` |
+
+Without the GitHub vars on your deployment, the widget will chat fine but **silently fail to create issues** — the whole feedback→pipeline loop won't work.
+
+Or via CLI:
+```bash
+vercel env add ANTHROPIC_API_KEY
+vercel env add FEEDBACK_PASSWORD
+# + GitHub tier:
+vercel env add GITHUB_TOKEN
+vercel env add GITHUB_REPO
+```
+
+After adding vars, redeploy: `vercel --prod` or push a commit.
+
+### Step 8c: Configure Vercel preview bypass (+ GitHub and + Pipeline)
 
 > **WARNING: Vercel SSO protection blocks webhook deliveries.** If your Vercel project uses team SSO, `*.vercel.app` URLs return 401 for all unauthenticated requests — including GitHub webhooks. Use a **custom domain** to bypass SSO protection.
 
