@@ -14,7 +14,7 @@ export function getGitHubApp(): App {
     _app = new App({
       appId,
       privateKey: privateKey.replace(/\\n/g, '\n'),
-      webhooks: { secret: process.env.GITHUB_APP_WEBHOOK_SECRET ?? '' },
+      webhooks: { secret: process.env.GITHUB_APP_WEBHOOK_SECRET || 'unused' },
     })
   }
   return _app
