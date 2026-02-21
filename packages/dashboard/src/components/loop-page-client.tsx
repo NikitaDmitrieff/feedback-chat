@@ -2,13 +2,20 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, XCircle, Eye, GitBranch, Loader2, ExternalLink } from 'lucide-react'
+import { CheckCircle2, XCircle, Eye, GitBranch, Loader2, ExternalLink, MessageCircle } from 'lucide-react'
 import { StepDots } from '@/components/step-dots'
 import { ProposalSlideOver } from '@/components/proposal-slide-over'
 import { LiveLogTail } from '@/components/live-log-tail'
 import { FeedbackList } from '@/components/feedback-list'
 import { FeedbackSlideOver } from '@/components/feedback-slide-over'
 import type { Proposal, PipelineRun, FeedbackTheme, FeedbackSession } from '@/lib/types'
+
+type FeedbackSource = {
+  session_id: string
+  tester_name: string | null
+  ai_summary: string | null
+  ai_themes: string[] | null
+}
 
 type Run = {
   id: string
@@ -19,6 +26,7 @@ type Run = {
   started_at: string
   completed_at: string | null
   result: string | null
+  feedback_source?: FeedbackSource | null
 }
 
 type Job = {
@@ -37,6 +45,7 @@ type Props = {
   themes: FeedbackTheme[]
   runs: Run[]
   activeJobs: Job[]
+  recentSessions: FeedbackSession[]
 }
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -64,7 +73,7 @@ function elapsed(start: string, end?: string | null): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
-export function LoopPageClient({ projectId, projectName, githubRepo, proposals: initialProposals, themes, runs, activeJobs }: Props) {
+export function LoopPageClient({ projectId, projectName, githubRepo, proposals: initialProposals, themes, runs, activeJobs, recentSessions }: Props) {
   const [proposals, setProposals] = useState(initialProposals)
   const [selected, setSelected] = useState<Proposal | null>(null)
   const [selectedTheme, setSelectedTheme] = useState<FeedbackTheme | null>(null)
@@ -119,24 +128,58 @@ export function LoopPageClient({ projectId, projectName, githubRepo, proposals: 
         <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted">
           What&apos;s coming in
         </h2>
-        {themes.length === 0 ? (
+        {themes.length === 0 && recentSessions.length === 0 ? (
           <p className="py-6 text-center text-xs text-dim">
-            No feedback themes yet. Feedback from testers will appear here as themes.
+            No feedback yet. Feedback from testers will appear here.
           </p>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {themes.map(theme => (
-              <button
-                key={theme.id}
-                onClick={() => setSelectedTheme(theme)}
-                className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-sm transition-colors hover:bg-white/[0.08]"
-              >
-                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: theme.color }} />
-                <span className="text-fg">{theme.name}</span>
-                <span className="text-xs tabular-nums text-muted">{theme.message_count}</span>
-              </button>
-            ))}
-          </div>
+          <>
+            {themes.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {themes.map(theme => (
+                  <button
+                    key={theme.id}
+                    onClick={() => setSelectedTheme(theme)}
+                    className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-sm transition-colors hover:bg-white/[0.08]"
+                  >
+                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: theme.color }} />
+                    <span className="text-fg">{theme.name}</span>
+                    <span className="text-xs tabular-nums text-muted">{theme.message_count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Recent conversations */}
+            {recentSessions.length > 0 && (
+              <div className={themes.length > 0 ? 'mt-5' : ''}>
+                <h3 className="mb-3 text-[11px] font-medium uppercase tracking-wider text-dim">Recent conversations</h3>
+                <div className="space-y-1.5">
+                  {recentSessions.map(session => (
+                    <button
+                      key={session.id}
+                      onClick={() => setSelectedSession(session)}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.04]"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5 shrink-0 text-accent/60" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-fg">
+                          {session.ai_summary || `Conversation with ${session.tester_name || 'Anonymous'}`}
+                        </p>
+                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted">
+                          <span>{session.tester_name || 'Anonymous'}</span>
+                          <span className="text-white/10">&middot;</span>
+                          <span>{timeAgo(session.last_message_at)}</span>
+                          <span className="text-white/10">&middot;</span>
+                          <span>{session.message_count} msgs</span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -369,6 +412,83 @@ export function LoopPageClient({ projectId, projectName, githubRepo, proposals: 
           </div>
         )}
       </section>
+
+      {/* Section 5: Run history */}
+      {runs.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted">
+            Run history
+          </h2>
+          <div className="glass-card overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-edge text-[11px] text-muted">
+                  <th className="px-4 py-2.5 font-medium">Issue</th>
+                  <th className="px-4 py-2.5 font-medium">Source</th>
+                  <th className="px-4 py-2.5 font-medium">Stage</th>
+                  <th className="px-4 py-2.5 font-medium">PR</th>
+                  <th className="px-4 py-2.5 font-medium">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.slice(0, 15).map(run => (
+                  <tr key={run.id} className="border-b border-edge/50 last:border-0">
+                    <td className="px-4 py-2.5">
+                      <Link
+                        href={`/projects/${projectId}/runs/${run.id}`}
+                        className="font-[family-name:var(--font-mono)] text-xs text-accent hover:text-fg"
+                      >
+                        #{run.github_issue_number}
+                      </Link>
+                    </td>
+                    <td className="max-w-[180px] px-4 py-2.5">
+                      {run.feedback_source ? (
+                        <div className="flex items-center gap-1.5">
+                          <MessageCircle className="h-3 w-3 shrink-0 text-accent/60" />
+                          <span className="truncate text-xs text-fg">
+                            {run.feedback_source.tester_name || 'Anonymous'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-dim">Manual</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                        run.result === 'success' ? 'text-success' :
+                        run.result === 'failed' ? 'text-red-400' :
+                        !run.result ? 'text-amber-400' : 'text-muted'
+                      }`}>
+                        {run.result === 'success' ? 'Deployed' :
+                         run.result === 'failed' ? 'Failed' :
+                         run.stage}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {run.github_pr_number && githubRepo ? (
+                        <a
+                          href={`https://github.com/${githubRepo}/pull/${run.github_pr_number}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-accent hover:text-fg"
+                        >
+                          #{run.github_pr_number}
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-dim">&mdash;</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs tabular-nums text-muted">
+                      {timeAgo(run.started_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* Proposal slide-over */}
       {selected && (
