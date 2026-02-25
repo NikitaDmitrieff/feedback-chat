@@ -1,6 +1,29 @@
 {
   "name": "@nikitadmitrieff/feedback-chat",
-  "version": "0.2.0",
+  "version": "0.2.1",
+  "description": "AI-powered feedback widget for Next.js — users chat, AI creates GitHub issues, an autonomous agent implements them, and the system learns from failures",
+  "keywords": [
+    "feedback",
+    "chatbot",
+    "nextjs",
+    "react",
+    "ai",
+    "claude",
+    "github-issues",
+    "autonomous-agent",
+    "self-improving",
+    "widget",
+    "pipeline",
+    "assistant-ui"
+  ],
+  "homepage": "https://github.com/NikitaDmitrieff/feedback-chat",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NikitaDmitrieff/feedback-chat.git",
+    "directory": "packages/widget"
+  },
+  "license": "MIT",
+  "author": "Nikita Dmitrieff <nikita@joincoby.com>",
   "type": "module",
   "main": "./dist/client/index.js",
   "types": "./dist/client/index.d.ts",
