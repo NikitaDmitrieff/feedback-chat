@@ -1,6 +1,6 @@
 {
   "name": "@nikitadmitrieff/feedback-chat",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "AI-powered feedback widget for Next.js — users chat, AI creates GitHub issues, an autonomous agent implements them, and the system learns from failures",
   "keywords": [
     "feedback",
