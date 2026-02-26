@@ -125,7 +125,6 @@ const ThreadSuggestionChip: FC<{ suggestion: SuggestionItem; index: number }> = 
     if (suggestion.prompt) {
       threadRuntime.composer.setText(suggestion.prompt);
     }
-    threadRuntime.composer.focus();
   }, [threadRuntime, suggestion.prompt]);
 
   return (
