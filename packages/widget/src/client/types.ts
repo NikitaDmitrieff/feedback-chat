@@ -31,7 +31,15 @@ export type Conversation = {
   updatedAt: string
 }
 
+export type SuggestionItem = {
+  title: string
+  description: string
+  prompt: string
+}
+
 export type FeedbackPanelProps = {
   isOpen: boolean
   onToggle: () => void
+  /** Suggestion chips shown on the welcome screen. Defaults to built-in examples. */
+  suggestions?: SuggestionItem[]
 }

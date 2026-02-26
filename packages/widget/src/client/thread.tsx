@@ -16,7 +16,6 @@ import {
   ComposerPrimitive,
   ErrorPrimitive,
   MessagePrimitive,
-  SuggestionPrimitive,
   ThreadPrimitive,
 } from "@assistant-ui/react";
 import {
@@ -32,7 +31,10 @@ import {
   RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
-import type { FC } from "react";
+import { type FC, useCallback } from "react";
+import { useThreadRuntime } from "@assistant-ui/react";
+import { useSuggestions } from "./suggestions-context";
+import type { SuggestionItem } from "./types";
 
 export const Thread: FC = () => {
   return (
@@ -87,10 +89,10 @@ const ThreadWelcome: FC = () => {
       <div className="aui-thread-welcome-center flex w-full grow flex-col items-center justify-center">
         <div className="aui-thread-welcome-message flex size-full flex-col items-center justify-center gap-1 px-4 text-center">
           <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-sm font-medium text-foreground duration-200">
-            Share an idea
+            What would you improve?
           </h1>
           <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-muted-foreground text-xs delay-75 duration-200">
-            Describe what you&apos;d like to improve.
+            Describe an issue or idea — AI will turn it into action.
           </p>
         </div>
       </div>
@@ -100,33 +102,46 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
+  const suggestions = useSuggestions();
+
+  if (suggestions.length === 0) return null;
+
   return (
-    <div className="aui-thread-welcome-suggestions grid w-full @md:grid-cols-2 gap-2 pb-4">
-      <ThreadPrimitive.Suggestions
-        components={{
-          Suggestion: ThreadSuggestionItem,
-        }}
-      />
+    <div className="aui-thread-welcome-suggestions grid w-full grid-cols-1 gap-2 pb-4 px-2">
+      {suggestions.map((suggestion, index) => (
+        <ThreadSuggestionChip key={index} suggestion={suggestion} index={index} />
+      ))}
     </div>
   );
 };
 
-const ThreadSuggestionItem: FC = () => {
+const ThreadSuggestionChip: FC<{ suggestion: SuggestionItem; index: number }> = ({
+  suggestion,
+  index,
+}) => {
+  const threadRuntime = useThreadRuntime();
+
+  const handleClick = useCallback(() => {
+    threadRuntime.composer.setText(suggestion.prompt);
+    threadRuntime.composer.send();
+  }, [threadRuntime, suggestion.prompt]);
+
   return (
-    <div className="aui-thread-welcome-suggestion-display fade-in slide-in-from-bottom-2 @md:nth-[n+3]:block nth-[n+3]:hidden animate-in fill-mode-both duration-200">
-      <SuggestionPrimitive.Trigger send asChild>
-        <Button
-          variant="ghost"
-          className="aui-thread-welcome-suggestion h-auto w-full @md:flex-col flex-wrap items-start justify-start gap-1 rounded-2xl border px-4 py-3 text-left text-sm transition-colors hover:bg-muted"
-        >
-          <span className="aui-thread-welcome-suggestion-text-1 font-medium">
-            <SuggestionPrimitive.Title />
-          </span>
-          <span className="aui-thread-welcome-suggestion-text-2 text-muted-foreground">
-            <SuggestionPrimitive.Description />
-          </span>
-        </Button>
-      </SuggestionPrimitive.Trigger>
+    <div
+      className="fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200"
+      style={{ animationDelay: `${100 + index * 75}ms` }}
+    >
+      <button
+        type="button"
+        onClick={handleClick}
+        className="flex h-auto w-full items-start gap-3 rounded-2xl border border-border bg-transparent px-4 py-3 text-left text-sm transition-all duration-200 hover:bg-muted hover:shadow-[0_2px_12px_rgba(0,0,0,0.2)]"
+      >
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="font-medium text-foreground">{suggestion.title}</span>
+          <span className="text-xs text-muted-foreground">{suggestion.description}</span>
+        </div>
+        <ArrowUpIcon className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
+      </button>
     </div>
   );
 };
@@ -137,7 +152,7 @@ const Composer: FC = () => {
       <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-3xl border border-border bg-card px-2 pt-2 shadow-[0_8px_30px_rgba(0,0,0,0.24)] outline-none transition-all duration-300 has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50">
         <ComposerAttachments />
         <ComposerPrimitive.Input
-          placeholder="Describe your idea..."
+          placeholder="Describe what you'd change..."
           className="aui-composer-input mb-1 max-h-32 min-h-14 w-full resize-none bg-transparent px-4 pt-2 pb-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
           rows={1}
           autoFocus

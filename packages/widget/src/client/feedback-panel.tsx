@@ -11,12 +11,13 @@ import { ConversationTabs } from './conversation-tabs'
 import { PresentOptionsToolUI } from './present-options-tool-ui'
 import { SubmitRequestToolUI } from './submit-request-tool-ui'
 import { TooltipProvider } from './ui/tooltip'
-import type { FeedbackPanelProps } from './types'
+import type { FeedbackPanelProps, SuggestionItem } from './types'
+import { SuggestionsProvider, DEFAULT_SUGGESTIONS } from './suggestions-context'
 
 const STORAGE_KEY = 'feedback_password'
 const NAME_KEY = 'feedback_tester_name'
 
-export function FeedbackPanel({ isOpen, onToggle, apiUrl = '/api/feedback/chat' }: FeedbackPanelProps & { apiUrl?: string }) {
+export function FeedbackPanel({ isOpen, onToggle, suggestions, apiUrl = '/api/feedback/chat' }: FeedbackPanelProps & { apiUrl?: string }) {
   const [authenticated, setAuthenticated] = useState(
     () => typeof window !== 'undefined' && sessionStorage.getItem(STORAGE_KEY) !== null
   )
@@ -87,9 +88,9 @@ export function FeedbackPanel({ isOpen, onToggle, apiUrl = '/api/feedback/chat' 
               type="text"
               value={triggerInput}
               onChange={(e) => setTriggerInput(e.target.value)}
-              placeholder="Share an idea..."
+              placeholder="What would you improve?"
               className="flex-1 bg-transparent py-3 text-sm text-[#e8eaed] outline-none placeholder:text-[#8b8d93]"
-              aria-label="Share an idea"
+              aria-label="What would you improve?"
             />
             <button
               type="submit"
@@ -126,14 +127,16 @@ export function FeedbackPanel({ isOpen, onToggle, apiUrl = '/api/feedback/chat' 
       >
         <div className="flex h-full w-[400px] flex-col text-foreground">
           {authenticated && testerName ? (
-            <ChatContent
-              isOpen={isOpen}
-              onClose={onToggle}
-              pendingMessage={pendingMessage}
-              onPendingMessageSent={clearPendingMessage}
-              apiUrl={apiUrl}
-              testerName={testerName}
-            />
+            <SuggestionsProvider value={suggestions ?? DEFAULT_SUGGESTIONS}>
+              <ChatContent
+                isOpen={isOpen}
+                onClose={onToggle}
+                pendingMessage={pendingMessage}
+                onPendingMessageSent={clearPendingMessage}
+                apiUrl={apiUrl}
+                testerName={testerName}
+              />
+            </SuggestionsProvider>
           ) : authenticated && !testerName ? (
             <div className="feedback-panel-glass flex h-full flex-col overflow-hidden">
               <NameGate onName={setTesterName} onClose={onToggle} />
