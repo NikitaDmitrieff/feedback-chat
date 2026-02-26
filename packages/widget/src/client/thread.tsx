@@ -122,8 +122,10 @@ const ThreadSuggestionChip: FC<{ suggestion: SuggestionItem; index: number }> = 
   const threadRuntime = useThreadRuntime();
 
   const handleClick = useCallback(() => {
-    threadRuntime.composer.setText(suggestion.prompt);
-    threadRuntime.composer.send();
+    if (suggestion.prompt) {
+      threadRuntime.composer.setText(suggestion.prompt);
+    }
+    threadRuntime.composer.focus();
   }, [threadRuntime, suggestion.prompt]);
 
   return (
@@ -140,7 +142,6 @@ const ThreadSuggestionChip: FC<{ suggestion: SuggestionItem; index: number }> = 
           <span className="font-medium text-foreground">{suggestion.title}</span>
           <span className="text-xs text-muted-foreground">{suggestion.description}</span>
         </div>
-        <ArrowUpIcon className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
       </button>
     </div>
   );
