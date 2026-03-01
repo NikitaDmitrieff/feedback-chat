@@ -8,6 +8,10 @@ User chats → GitHub issue → Claude agent implements → PR → preview → a
                               Haiku classifies → self-improve job → fix PR
 ```
 
+## Demo
+
+<video src="https://github.com/NikitaDmitrieff/feedback-chat/raw/main/docs/demo.mp4" controls width="100%"></video>
+
 ## Quick Actions
 
 ```bash
