@@ -10,7 +10,7 @@ User chats → GitHub issue → Claude agent implements → PR → preview → a
 
 ## Demo
 
-<video src="https://github.com/NikitaDmitrieff/feedback-chat/releases/download/demo-assets/demo.mp4" controls muted autoplay loop></video>
+<video src="https://github.com/user-attachments/assets/560c8738-8c88-443b-8cd8-7c7390971e2c" controls muted autoplay loop></video>
 
 ## Quick Actions
 
